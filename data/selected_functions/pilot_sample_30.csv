@@ -1,0 +1,1297 @@
+function_name,file_path,start_line,end_line,source_code,complexity_score,radon_rank,complexity_level,total_lines,useful_lines
+mixed_keyword,ciphers\mixed_keyword_cypher.py,4,70,"def mixed_keyword(
+    keyword: str, plaintext: str, verbose: bool = False, alphabet: str = ascii_uppercase
+) -> str:
+    """"""
+    For keyword: hello
+
+    H E L O
+    A B C D
+    F G I J
+    K M N P
+    Q R S T
+    U V W X
+    Y Z
+    and map vertically
+
+    >>> mixed_keyword(""college"", ""UNIVERSITY"", True)  # doctest: +NORMALIZE_WHITESPACE
+    {'A': 'C', 'B': 'A', 'C': 'I', 'D': 'P', 'E': 'U', 'F': 'Z', 'G': 'O', 'H': 'B',
+     'I': 'J', 'J': 'Q', 'K': 'V', 'L': 'L', 'M': 'D', 'N': 'K', 'O': 'R', 'P': 'W',
+     'Q': 'E', 'R': 'F', 'S': 'M', 'T': 'S', 'U': 'X', 'V': 'G', 'W': 'H', 'X': 'N',
+     'Y': 'T', 'Z': 'Y'}
+    'XKJGUFMJST'
+
+    >>> mixed_keyword(""college"", ""UNIVERSITY"", False)  # doctest: +NORMALIZE_WHITESPACE
+    'XKJGUFMJST'
+    """"""
+    keyword = keyword.upper()
+    plaintext = plaintext.upper()
+    alphabet_set = set(alphabet)
+
+    # create a list of unique characters in the keyword - their order matters
+    # it determines how we will map plaintext characters to the ciphertext
+    unique_chars = []
+    for char in keyword:
+        if char in alphabet_set and char not in unique_chars:
+            unique_chars.append(char)
+    # the number of those unique characters will determine the number of rows
+    num_unique_chars_in_keyword = len(unique_chars)
+
+    # create a shifted version of the alphabet
+    shifted_alphabet = unique_chars + [
+        char for char in alphabet if char not in unique_chars
+    ]
+
+    # create a modified alphabet by splitting the shifted alphabet into rows
+    modified_alphabet = [
+        shifted_alphabet[k : k + num_unique_chars_in_keyword]
+        for k in range(0, 26, num_unique_chars_in_keyword)
+    ]
+
+    # map the alphabet characters to the modified alphabet characters
+    # going 'vertically' through the modified alphabet - consider columns first
+    mapping = {}
+    letter_index = 0
+    for column in range(num_unique_chars_in_keyword):
+        for row in modified_alphabet:
+            # if current row (the last one) is too short, break out of loop
+            if len(row) <= column:
+                break
+
+            # map current letter to letter in modified alphabet
+            mapping[alphabet[letter_index]] = row[column]
+            letter_index += 1
+
+    if verbose:
+        print(mapping)
+    # create the encrypted text by mapping the plaintext to the modified alphabet
+    return """".join(mapping.get(char, char) for char in plaintext)",12,C,alta,67,48
+rgb_to_hsv,conversions\rgb_hsv_conversion.py,84,139,"def rgb_to_hsv(red: int, green: int, blue: int) -> list[float]:
+    """"""
+    Conversion from the RGB-representation to the HSV-representation.
+    The tested values are the reverse values from the hsv_to_rgb-doctests.
+    Function ""approximately_equal_hsv"" is needed because of small deviations due to
+    rounding for the RGB-values.
+
+    >>> approximately_equal_hsv(rgb_to_hsv(0, 0, 0), [0, 0, 0])
+    True
+    >>> approximately_equal_hsv(rgb_to_hsv(255, 255, 255), [0, 0, 1])
+    True
+    >>> approximately_equal_hsv(rgb_to_hsv(255, 0, 0), [0, 1, 1])
+    True
+    >>> approximately_equal_hsv(rgb_to_hsv(255, 255, 0), [60, 1, 1])
+    True
+    >>> approximately_equal_hsv(rgb_to_hsv(0, 255, 0), [120, 1, 1])
+    True
+    >>> approximately_equal_hsv(rgb_to_hsv(0, 0, 255), [240, 1, 1])
+    True
+    >>> approximately_equal_hsv(rgb_to_hsv(255, 0, 255), [300, 1, 1])
+    True
+    >>> approximately_equal_hsv(rgb_to_hsv(64, 128, 128), [180, 0.5, 0.5])
+    True
+    >>> approximately_equal_hsv(rgb_to_hsv(193, 196, 224), [234, 0.14, 0.88])
+    True
+    >>> approximately_equal_hsv(rgb_to_hsv(128, 32, 80), [330, 0.75, 0.5])
+    True
+    """"""
+    if red < 0 or red > 255:
+        raise Exception(""red should be between 0 and 255"")
+
+    if green < 0 or green > 255:
+        raise Exception(""green should be between 0 and 255"")
+
+    if blue < 0 or blue > 255:
+        raise Exception(""blue should be between 0 and 255"")
+
+    float_red = red / 255
+    float_green = green / 255
+    float_blue = blue / 255
+    value = max(float_red, float_green, float_blue)
+    chroma = value - min(float_red, float_green, float_blue)
+    saturation = 0 if value == 0 else chroma / value
+
+    if chroma == 0:
+        hue = 0.0
+    elif value == float_red:
+        hue = 60 * (0 + (float_green - float_blue) / chroma)
+    elif value == float_green:
+        hue = 60 * (2 + (float_blue - float_red) / chroma)
+    else:
+        hue = 60 * (4 + (float_red - float_green) / chroma)
+
+    hue = (hue + 360) % 360
+
+    return [hue, saturation, value]",11,C,alta,56,49
+suppress_non_maximum,digital_image_processing\edge_detection\canny.py,21,70,"def suppress_non_maximum(image_shape, gradient_direction, sobel_grad):
+    """"""
+    Non-maximum suppression. If the edge strength of the current pixel is the largest
+    compared to the other pixels in the mask with the same direction, the value will be
+    preserved. Otherwise, the value will be suppressed.
+    """"""
+    destination = np.zeros(image_shape)
+
+    for row in range(1, image_shape[0] - 1):
+        for col in range(1, image_shape[1] - 1):
+            direction = gradient_direction[row, col]
+
+            if (
+                0 <= direction < PI / 8
+                or 15 * PI / 8 <= direction <= 2 * PI
+                or 7 * PI / 8 <= direction <= 9 * PI / 8
+            ):
+                w = sobel_grad[row, col - 1]
+                e = sobel_grad[row, col + 1]
+                if sobel_grad[row, col] >= w and sobel_grad[row, col] >= e:
+                    destination[row, col] = sobel_grad[row, col]
+
+            elif (
+                PI / 8 <= direction < 3 * PI / 8
+                or 9 * PI / 8 <= direction < 11 * PI / 8
+            ):
+                sw = sobel_grad[row + 1, col - 1]
+                ne = sobel_grad[row - 1, col + 1]
+                if sobel_grad[row, col] >= sw and sobel_grad[row, col] >= ne:
+                    destination[row, col] = sobel_grad[row, col]
+
+            elif (
+                3 * PI / 8 <= direction < 5 * PI / 8
+                or 11 * PI / 8 <= direction < 13 * PI / 8
+            ):
+                n = sobel_grad[row - 1, col]
+                s = sobel_grad[row + 1, col]
+                if sobel_grad[row, col] >= n and sobel_grad[row, col] >= s:
+                    destination[row, col] = sobel_grad[row, col]
+
+            elif (
+                5 * PI / 8 <= direction < 7 * PI / 8
+                or 13 * PI / 8 <= direction < 15 * PI / 8
+            ):
+                nw = sobel_grad[row - 1, col - 1]
+                se = sobel_grad[row + 1, col + 1]
+                if sobel_grad[row, col] >= nw and sobel_grad[row, col] >= se:
+                    destination[row, col] = sobel_grad[row, col]
+
+    return destination",20,C,alta,50,44
+convex_hull_bf,divide_and_conquer\convex_hull.py,223,292,"def convex_hull_bf(points: list[Point]) -> list[Point]:
+    """"""
+    Constructs the convex hull of a set of 2D points using a brute force algorithm.
+    The algorithm basically considers all combinations of points (i, j) and uses the
+    definition of convexity to determine whether (i, j) is part of the convex hull or
+    not.  (i, j) is part of the convex hull if and only iff there are no points on both
+    sides of the line segment connecting the ij, and there is no point k such that k is
+    on either end of the ij.
+
+    Runtime: O(n^3) - definitely horrible
+
+    Parameters
+    ---------
+    points: array-like of object of Points, lists or tuples.
+    The set of  2d points for which the convex-hull is needed
+
+    Returns
+    ------
+    convex_set: list, the convex-hull of points sorted in non-decreasing order.
+
+    See Also
+    --------
+    convex_hull_recursive,
+
+     Examples
+     ---------
+     >>> convex_hull_bf([[0, 0], [1, 0], [10, 1]])
+     [(0.0, 0.0), (1.0, 0.0), (10.0, 1.0)]
+     >>> convex_hull_bf([[0, 0], [1, 0], [10, 0]])
+     [(0.0, 0.0), (10.0, 0.0)]
+     >>> convex_hull_bf([[-1, 1],[-1, -1], [0, 0], [0.5, 0.5], [1, -1], [1, 1],
+     ...                 [-0.75, 1]])
+     [(-1.0, -1.0), (-1.0, 1.0), (1.0, -1.0), (1.0, 1.0)]
+     >>> convex_hull_bf([(0, 3), (2, 2), (1, 1), (2, 1), (3, 0), (0, 0), (3, 3),
+     ...                 (2, -1), (2, -4), (1, -3)])
+     [(0.0, 0.0), (0.0, 3.0), (1.0, -3.0), (2.0, -4.0), (3.0, 0.0), (3.0, 3.0)]
+    """"""
+
+    points = sorted(_validate_input(points))
+    n = len(points)
+    convex_set = set()
+
+    for i in range(n - 1):
+        for j in range(i + 1, n):
+            points_left_of_ij = points_right_of_ij = False
+            ij_part_of_convex_hull = True
+            for k in range(n):
+                if k not in {i, j}:
+                    det_k = _det(points[i], points[j], points[k])
+
+                    if det_k > 0:
+                        points_left_of_ij = True
+                    elif det_k < 0:
+                        points_right_of_ij = True
+                    # point[i], point[j], point[k] all lie on a straight line
+                    # if point[k] is to the left of point[i] or it's to the
+                    # right of point[j], then point[i], point[j] cannot be
+                    # part of the convex hull of A
+                    elif points[k] < points[i] or points[k] > points[j]:
+                        ij_part_of_convex_hull = False
+                        break
+
+                if points_left_of_ij and points_right_of_ij:
+                    ij_part_of_convex_hull = False
+                    break
+
+            if ij_part_of_convex_hull:
+                convex_set.update([points[i], points[j]])
+
+    return sorted(convex_set)",12,C,alta,70,55
+longest_common_subsequence,dynamic_programming\longest_common_subsequence.py,9,82,"def longest_common_subsequence(x: str, y: str):
+    """"""
+    Finds the longest common subsequence between two strings. Also returns the
+    The subsequence found
+
+    Parameters
+    ----------
+
+    x: str, one of the strings
+    y: str, the other string
+
+    Returns
+    -------
+    L[m][n]: int, the length of the longest subsequence. Also equal to len(seq)
+    Seq: str, the subsequence found
+
+    >>> longest_common_subsequence(""programming"", ""gaming"")
+    (6, 'gaming')
+    >>> longest_common_subsequence(""physics"", ""smartphone"")
+    (2, 'ph')
+    >>> longest_common_subsequence(""computer"", ""food"")
+    (1, 'o')
+    >>> longest_common_subsequence("""", ""abc"")  # One string is empty
+    (0, '')
+    >>> longest_common_subsequence(""abc"", """")  # Other string is empty
+    (0, '')
+    >>> longest_common_subsequence("""", """")  # Both strings are empty
+    (0, '')
+    >>> longest_common_subsequence(""abc"", ""def"")  # No common subsequence
+    (0, '')
+    >>> longest_common_subsequence(""abc"", ""abc"")  # Identical strings
+    (3, 'abc')
+    >>> longest_common_subsequence(""a"", ""a"")  # Single character match
+    (1, 'a')
+    >>> longest_common_subsequence(""a"", ""b"")  # Single character no match
+    (0, '')
+    >>> longest_common_subsequence(""abcdef"", ""ace"")  # Interleaved subsequence
+    (3, 'ace')
+    >>> longest_common_subsequence(""ABCD"", ""ACBD"")  # No repeated characters
+    (3, 'ABD')
+    """"""
+    # find the length of strings
+
+    assert x is not None
+    assert y is not None
+
+    m = len(x)
+    n = len(y)
+
+    # declaring the array for storing the dp values
+    dp = [[0] * (n + 1) for _ in range(m + 1)]
+
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            match = 1 if x[i - 1] == y[j - 1] else 0
+
+            dp[i][j] = max(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1] + match)
+
+    seq = """"
+    i, j = m, n
+    while i > 0 and j > 0:
+        match = 1 if x[i - 1] == y[j - 1] else 0
+
+        if dp[i][j] == dp[i - 1][j - 1] + match:
+            if match == 1:
+                seq = x[i - 1] + seq
+            i -= 1
+            j -= 1
+        elif dp[i][j] == dp[i - 1][j]:
+            i -= 1
+        else:
+            j -= 1
+
+    return dp[m][n], seq",13,C,alta,74,60
+dijk,graphs\basic_graphs.py,149,179,"def dijk(g, s):
+    """"""
+    dijk({1: [(2, 7), (3, 9), (6, 14)],
+        2: [(1, 7), (3, 10), (4, 15)],
+        3: [(1, 9), (2, 10), (4, 11), (6, 2)],
+        4: [(2, 15), (3, 11), (5, 6)],
+        5: [(4, 6), (6, 9)],
+        6: [(1, 14), (3, 2), (5, 9)]}, 1)
+    7
+    9
+    11
+    20
+    20
+    """"""
+    dist, known, path = {s: 0}, set(), {s: 0}
+    while True:
+        if len(known) == len(g) - 1:
+            break
+        mini = 100000
+        for key, value in dist:
+            if key not in known and value < mini:
+                mini = value
+                u = key
+        known.add(u)
+        for v in g[u]:
+            if v[0] not in known and dist[u] + v[1] < dist.get(v[0], 100000):
+                dist[v[0]] = dist[u] + v[1]
+                path[v[0]] = u
+    for key, value in dist.items():
+        if key != s:
+            print(value)",11,C,alta,31,31
+calc_profit,knapsack\greedy_knapsack.py,20,84,"def calc_profit(profit: list, weight: list, max_weight: int) -> int:
+    """"""
+    Function description is as follows-
+    :param profit: Take a list of profits
+    :param weight: Take a list of weight if bags corresponding to the profits
+    :param max_weight: Maximum weight that could be carried
+    :return: Maximum expected gain
+
+    >>> calc_profit([1, 2, 3], [3, 4, 5], 15)
+    6
+    >>> calc_profit([10, 9 , 8], [3 ,4 , 5], 25)
+    27
+    """"""
+    if len(profit) != len(weight):
+        raise ValueError(""The length of profit and weight must be same."")
+    if max_weight <= 0:
+        raise ValueError(""max_weight must greater than zero."")
+    if any(p < 0 for p in profit):
+        raise ValueError(""Profit can not be negative."")
+    if any(w < 0 for w in weight):
+        raise ValueError(""Weight can not be negative."")
+
+    # List created to store profit gained for the 1kg in case of each weight
+    # respectively.  Calculate and append profit/weight for each element.
+    profit_by_weight = [p / w for p, w in zip(profit, weight)]
+
+    # Creating a copy of the list and sorting profit/weight in ascending order
+    sorted_profit_by_weight = sorted(profit_by_weight)
+
+    # declaring useful variables
+    length = len(sorted_profit_by_weight)
+    limit = 0
+    gain = 0
+    i = 0
+
+    # loop till the total weight do not reach max limit e.g. 15 kg and till i<length
+    while limit <= max_weight and i < length:
+        # flag value for encountered greatest element in sorted_profit_by_weight
+        biggest_profit_by_weight = sorted_profit_by_weight[length - i - 1]
+        """"""
+        Calculate the index of the biggest_profit_by_weight in profit_by_weight list.
+        This will give the index of the first encountered element which is same as of
+        biggest_profit_by_weight.  There may be one or more values same as that of
+        biggest_profit_by_weight but index always encounter the very first element
+        only.  To curb this alter the values in profit_by_weight once they are used
+        here it is done to -1 because neither profit nor weight can be in negative.
+        """"""
+        index = profit_by_weight.index(biggest_profit_by_weight)
+        profit_by_weight[index] = -1
+
+        # check if the weight encountered is less than the total weight
+        # encountered before.
+        if max_weight - limit >= weight[index]:
+            limit += weight[index]
+            # Adding profit gained for the given weight 1 ===
+            # weight[index]/weight[index]
+            gain += 1 * profit[index]
+        else:
+            # Since the weight encountered is greater than limit, therefore take the
+            # required number of remaining kgs and calculate profit for it.
+            # weight remaining / weight[index]
+            gain += (max_weight - limit) / weight[index] * profit[index]
+            break
+        i += 1
+    return gain",11,C,alta,65,46
+solve_simultaneous,maths\simultaneous_linear_equation_solver.py,57,127,"def solve_simultaneous(equations: list[list]) -> list:
+    """"""
+    >>> solve_simultaneous([[1, 2, 3],[4, 5, 6]])
+    [-1.0, 2.0]
+    >>> solve_simultaneous([[0, -3, 1, 7],[3, 2, -1, 11],[5, 1, -2, 12]])
+    [6.4, 1.2, 10.6]
+    >>> solve_simultaneous([])
+    Traceback (most recent call last):
+        ...
+    IndexError: solve_simultaneous() requires n lists of length n+1
+    >>> solve_simultaneous([[1, 2, 3],[1, 2]])
+    Traceback (most recent call last):
+        ...
+    IndexError: solve_simultaneous() requires n lists of length n+1
+    >>> solve_simultaneous([[1, 2, 3],[""a"", 7, 8]])
+    Traceback (most recent call last):
+        ...
+    ValueError: solve_simultaneous() requires lists of integers
+    >>> solve_simultaneous([[0, 2, 3],[4, 0, 6]])
+    Traceback (most recent call last):
+        ...
+    ValueError: solve_simultaneous() requires at least 1 full equation
+    """"""
+    if len(equations) == 0:
+        raise IndexError(""solve_simultaneous() requires n lists of length n+1"")
+    _length = len(equations) + 1
+    if any(len(item) != _length for item in equations):
+        raise IndexError(""solve_simultaneous() requires n lists of length n+1"")
+    for row in equations:
+        if any(not isinstance(column, (int, float)) for column in row):
+            raise ValueError(""solve_simultaneous() requires lists of integers"")
+    if len(equations) == 1:
+        return [equations[0][-1] / equations[0][0]]
+    data_set = equations.copy()
+    if any(0 in row for row in data_set):
+        temp_data = data_set.copy()
+        full_row = []
+        for row_index, row in enumerate(temp_data):
+            if 0 not in row:
+                full_row = data_set.pop(row_index)
+                break
+        if not full_row:
+            raise ValueError(""solve_simultaneous() requires at least 1 full equation"")
+        data_set.insert(0, full_row)
+    useable_form = data_set.copy()
+    simplified = simplify(useable_form)
+    simplified = simplified[::-1]
+    solutions: list = []
+    for row in simplified:
+        current_solution = row[-1]
+        if not solutions:
+            if row[-2] == 0:
+                solutions.append(0)
+                continue
+            solutions.append(current_solution / row[-2])
+            continue
+        temp_row = row.copy()[: len(row) - 1 :]
+        while temp_row[0] == 0:
+            temp_row.pop(0)
+        if len(temp_row) == 0:
+            solutions.append(0)
+            continue
+        temp_row = temp_row[1::]
+        temp_row = temp_row[::-1]
+        for column_index, column in enumerate(temp_row):
+            current_solution -= column * solutions[column_index]
+        solutions.append(current_solution)
+    final = []
+    for item in solutions:
+        final.append(float(round(item, 5)))
+    return final[::-1]",20,C,alta,71,71
+dpll_algorithm,other\davis_putnam_logemann_loveland.py,285,350,"def dpll_algorithm(
+    clauses: list[Clause], symbols: list[str], model: dict[str, bool | None]
+) -> tuple[bool | None, dict[str, bool | None] | None]:
+    """"""
+    Returns the model if the formula is satisfiable, else ``None``
+
+    This has the following steps:
+      1. If every clause in clauses is ``True``, return ``True``.
+      2. If some clause in clauses is ``False``, return ``False``.
+      3. Find pure symbols.
+      4. Find unit symbols.
+
+    >>> formula = Formula([Clause([""A4"", ""A3"", ""A5'"", ""A1"", ""A3'""]), Clause([""A4""])])
+    >>> clauses, symbols = generate_parameters(formula)
+    >>> soln, model = dpll_algorithm(clauses, symbols, {})
+    >>> soln
+    True
+    >>> model
+    {'A4': True}
+    """"""
+    check_clause_all_true = True
+    for clause in clauses:
+        clause_check = clause.evaluate(model)
+        if clause_check is False:
+            return False, None
+        elif clause_check is None:
+            check_clause_all_true = False
+            continue
+
+    if check_clause_all_true:
+        return True, model
+
+    try:
+        pure_symbols, assignment = find_pure_symbols(clauses, symbols, model)
+    except RecursionError:
+        print(""raises a RecursionError and is"")
+        return None, {}
+    p = None
+    if len(pure_symbols) > 0:
+        p, value = pure_symbols[0], assignment[pure_symbols[0]]
+
+    if p:
+        tmp_model = model
+        tmp_model[p] = value
+        tmp_symbols = list(symbols)
+        if p in tmp_symbols:
+            tmp_symbols.remove(p)
+        return dpll_algorithm(clauses, tmp_symbols, tmp_model)
+
+    unit_symbols, assignment = find_unit_clauses(clauses, model)
+    p = None
+    if len(unit_symbols) > 0:
+        p, value = unit_symbols[0], assignment[unit_symbols[0]]
+    if p:
+        tmp_model = model
+        tmp_model[p] = value
+        tmp_symbols = list(symbols)
+        if p in tmp_symbols:
+            tmp_symbols.remove(p)
+        return dpll_algorithm(clauses, tmp_symbols, tmp_model)
+    p = symbols[0]
+    rest = symbols[1:]
+    tmp1, tmp2 = model, model
+    tmp1[p], tmp2[p] = True, False
+
+    return dpll_algorithm(clauses, rest, tmp1) or dpll_algorithm(clauses, rest, tmp2)",13,C,alta,66,59
+hill_climbing,searches\hill_climbing.py,86,159,"def hill_climbing(
+    search_prob,
+    find_max: bool = True,
+    max_x: float = math.inf,
+    min_x: float = -math.inf,
+    max_y: float = math.inf,
+    min_y: float = -math.inf,
+    visualization: bool = False,
+    max_iter: int = 10000,
+) -> SearchProblem:
+    """"""
+    Implementation of the hill climbling algorithm.
+    We start with a given state, find all its neighbors,
+    move towards the neighbor which provides the maximum (or minimum) change.
+    We keep doing this until we are at a state where we do not have any
+    neighbors which can improve the solution.
+        Args:
+            search_prob: The search state at the start.
+            find_max: If True, the algorithm should find the maximum else the minimum.
+            max_x, min_x, max_y, min_y: the maximum and minimum bounds of x and y.
+            visualization: If True, a matplotlib graph is displayed.
+            max_iter: number of times to run the iteration.
+        Returns a search state having the maximum (or minimum) score.
+    """"""
+    current_state = search_prob
+    scores = []  # list to store the current score at each iteration
+    iterations = 0
+    solution_found = False
+    visited = set()
+    while not solution_found and iterations < max_iter:
+        visited.add(current_state)
+        iterations += 1
+        current_score = current_state.score()
+        scores.append(current_score)
+        neighbors = current_state.get_neighbors()
+        max_change = -math.inf
+        min_change = math.inf
+        next_state = None  # to hold the next best neighbor
+        for neighbor in neighbors:
+            if neighbor in visited:
+                continue  # do not want to visit the same state again
+            if (
+                neighbor.x > max_x
+                or neighbor.x < min_x
+                or neighbor.y > max_y
+                or neighbor.y < min_y
+            ):
+                continue  # neighbor outside our bounds
+            change = neighbor.score() - current_score
+            if find_max:  # finding max
+                # going to direction with greatest ascent
+                if change > max_change and change > 0:
+                    max_change = change
+                    next_state = neighbor
+            elif change < min_change and change < 0:  # finding min
+                # to direction with greatest descent
+                min_change = change
+                next_state = neighbor
+        if next_state is not None:
+            # we found at least one neighbor which improved the current state
+            current_state = next_state
+        else:
+            # since we have no neighbor that improves the solution we stop the search
+            solution_found = True
+
+    if visualization:
+        from matplotlib import pyplot as plt
+
+        plt.plot(range(iterations), scores)
+        plt.xlabel(""Iterations"")
+        plt.ylabel(""Function values"")
+        plt.show()
+
+    return current_state",16,C,alta,74,67
+diophantine,blockchain\diophantine_equation.py,6,30,"def diophantine(a: int, b: int, c: int) -> tuple[float, float]:
+    """"""
+    Diophantine Equation : Given integers a,b,c ( at least one of a and b != 0), the
+    diophantine equation a*x + b*y = c has a solution (where x and y are integers)
+    iff greatest_common_divisor(a,b) divides c.
+
+    GCD ( Greatest Common Divisor ) or HCF ( Highest Common Factor )
+
+    >>> diophantine(10,6,14)
+    (-7.0, 14.0)
+
+    >>> diophantine(391,299,-69)
+    (9.0, -12.0)
+
+    But above equation has one more solution i.e., x = -4, y = 5.
+    That's why we need diophantine all solution function.
+
+    """"""
+
+    assert (
+        c % greatest_common_divisor(a, b) == 0
+    )  # greatest_common_divisor(a,b) is in maths directory
+    (d, x, y) = extended_gcd(a, b)  # extended_gcd(a,b) function implemented below
+    r = c / d
+    return (r * x, r * y)",2,A,baixa,25,19
+convert_to_negative,digital_image_processing\convert_to_negative.py,8,17,"def convert_to_negative(img):
+    # getting number of pixels in the image
+    pixel_h, pixel_v = img.shape[0], img.shape[1]
+
+    # converting each pixel's color to its negative
+    for i in range(pixel_h):
+        for j in range(pixel_v):
+            img[i][j] = [255, 255, 255] - img[i][j]
+
+    return img",3,A,baixa,10,6
+check_polygon,maths\check_polygon.py,4,38,"def check_polygon(nums: list[float]) -> bool:
+    """"""
+    Takes list of possible side lengths and determines whether a
+    two-dimensional polygon with such side lengths can exist.
+
+    Returns a boolean value for the < comparison
+    of the largest side length with sum of the rest.
+    Wiki: https://en.wikipedia.org/wiki/Triangle_inequality
+
+    >>> check_polygon([6, 10, 5])
+    True
+    >>> check_polygon([3, 7, 13, 2])
+    False
+    >>> check_polygon([1, 4.3, 5.2, 12.2])
+    False
+    >>> nums = [3, 7, 13, 2]
+    >>> _ = check_polygon(nums) #   Run function, do not show answer in output
+    >>> nums #  Check numbers are not reordered
+    [3, 7, 13, 2]
+    >>> check_polygon([])
+    Traceback (most recent call last):
+        ...
+    ValueError: Monogons and Digons are not polygons in the Euclidean space
+    >>> check_polygon([-2, 5, 6])
+    Traceback (most recent call last):
+        ...
+    ValueError: All values must be greater than 0
+    """"""
+    if len(nums) < 2:
+        raise ValueError(""Monogons and Digons are not polygons in the Euclidean space"")
+    if any(i <= 0 for i in nums):
+        raise ValueError(""All values must be greater than 0"")
+    copy_nums = nums.copy()
+    copy_nums.sort()
+    return copy_nums[-1] < sum(copy_nums[:-1])",4,A,baixa,35,33
+perfect,maths\perfect_number.py,15,72,"def perfect(number: int) -> bool:
+    """"""
+    Check if a number is a perfect number.
+
+    A perfect number is a positive integer that is equal to the sum of its proper
+    divisors (excluding itself).
+
+    Args:
+        number: The number to be checked.
+
+    Returns:
+        True if the number is a perfect number otherwise, False.
+    Start from 1 because dividing by 0 will raise ZeroDivisionError.
+    A number at most can be divisible by the half of the number except the number
+    itself. For example, 6 is at most can be divisible by 3 except by 6 itself.
+    Examples:
+    >>> perfect(27)
+    False
+    >>> perfect(28)
+    True
+    >>> perfect(29)
+    False
+    >>> perfect(6)
+    True
+    >>> perfect(12)
+    False
+    >>> perfect(496)
+    True
+    >>> perfect(8128)
+    True
+    >>> perfect(0)
+    False
+    >>> perfect(-1)
+    False
+    >>> perfect(33550336)  # Large perfect number
+    True
+    >>> perfect(33550337)  # Just above a large perfect number
+    False
+    >>> perfect(1)  # Edge case: 1 is not a perfect number
+    False
+    >>> perfect(""123"")  # String representation of a number
+    Traceback (most recent call last):
+    ...
+    ValueError: number must be an integer
+    >>> perfect(12.34)
+    Traceback (most recent call last):
+      ...
+    ValueError: number must be an integer
+    >>> perfect(""Hello"")
+    Traceback (most recent call last):
+      ...
+    ValueError: number must be an integer
+    """"""
+    if not isinstance(number, int):
+        raise ValueError(""number must be an integer"")
+    if number <= 0:
+        return False
+    return sum(i for i in range(1, number // 2 + 1) if number % i == 0) == number",5,A,baixa,58,55
+is_in_unit_circle,maths\pi_monte_carlo_estimation.py,9,14,"    def is_in_unit_circle(self) -> bool:
+        """"""
+        True, if the point lies in the unit circle
+        False, otherwise
+        """"""
+        return (self.x**2 + self.y**2) <= 1",1,A,baixa,6,6
+solution,project_euler\problem_067\sol2.py,18,36,"def solution() -> int:
+    """"""
+    Finds the maximum total in a triangle as described by the problem statement
+    above.
+    >>> solution()
+    7273
+    """"""
+    script_dir = os.path.dirname(os.path.realpath(__file__))
+    triangle_path = os.path.join(script_dir, ""triangle.txt"")
+
+    with open(triangle_path) as in_file:
+        triangle = [[int(i) for i in line.split()] for line in in_file]
+
+    while len(triangle) != 1:
+        last_row = triangle.pop()
+        curr_row = triangle[-1]
+        for j in range(len(last_row) - 1):
+            curr_row[j] += max(last_row[j], last_row[j + 1])
+    return triangle[0][0]",5,A,baixa,19,17
+solution,project_euler\problem_086\sol1.py,72,100,"def solution(limit: int = 1000000) -> int:
+    """"""
+    Return the least value of M such that there are more than one million cuboids
+    of side lengths 1 <= a,b,c <= M such that the shortest distance between two
+    opposite vertices of the cuboid is integral.
+    >>> solution(100)
+    24
+    >>> solution(1000)
+    72
+    >>> solution(2000)
+    100
+    >>> solution(20000)
+    288
+    """"""
+    num_cuboids: int = 0
+    max_cuboid_size: int = 0
+    sum_shortest_sides: int
+
+    while num_cuboids <= limit:
+        max_cuboid_size += 1
+        for sum_shortest_sides in range(2, 2 * max_cuboid_size + 1):
+            if sqrt(sum_shortest_sides**2 + max_cuboid_size**2).is_integer():
+                num_cuboids += (
+                    min(max_cuboid_size, sum_shortest_sides // 2)
+                    - max(1, sum_shortest_sides - max_cuboid_size)
+                    + 1
+                )
+
+    return max_cuboid_size",4,A,baixa,29,27
+solution,project_euler\problem_100\sol1.py,16,44,"def solution(min_total: int = 10**12) -> int:
+    """"""
+    Returns the number of blue discs for the first arrangement to contain
+    over min_total discs in total
+
+    >>> solution(2)
+    3
+
+    >>> solution(4)
+    15
+
+    >>> solution(21)
+    85
+    """"""
+
+    prev_numerator = 1
+    prev_denominator = 0
+
+    numerator = 1
+    denominator = 1
+
+    while numerator <= 2 * min_total - 1:
+        prev_numerator += 2 * numerator
+        numerator += 2 * prev_numerator
+
+        prev_denominator += 2 * denominator
+        denominator += 2 * prev_denominator
+
+    return (denominator + 1) // 2",2,A,baixa,29,21
+score,searches\hill_climbing.py,25,35,"    def score(self) -> int:
+        """"""
+        Returns the output of the function called with current x and y coordinates.
+        >>> def test_function(x, y):
+        ...     return x + y
+        >>> SearchProblem(0, 0, 1, test_function).score()  # 0 + 0 = 0
+        0
+        >>> SearchProblem(5, 7, 1, test_function).score()  # 5 + 7 = 12
+        12
+        """"""
+        return self.function(self.x, self.y)",1,A,baixa,11,11
+strip,strings\strip.py,1,33,"def strip(user_string: str, characters: str = "" \t\n\r"") -> str:
+    """"""
+    Remove leading and trailing characters (whitespace by default) from a string.
+
+    Args:
+        user_string (str): The input string to be stripped.
+        characters (str, optional): Optional characters to be removed
+                (default is whitespace).
+
+    Returns:
+        str: The stripped string.
+
+    Examples:
+        >>> strip(""   hello   "")
+        'hello'
+        >>> strip(""...world..."", ""."")
+        'world'
+        >>> strip(""123hello123"", ""123"")
+        'hello'
+        >>> strip("""")
+        ''
+    """"""
+
+    start = 0
+    end = len(user_string)
+
+    while start < end and user_string[start] in characters:
+        start += 1
+
+    while end > start and user_string[end - 1] in characters:
+        end -= 1
+
+    return user_string[start:end]",5,A,baixa,33,26
+transform,computer_vision\haralick_descriptors.py,104,157,"def transform(
+    image: np.ndarray, kind: str, kernel: np.ndarray | None = None
+) -> np.ndarray:
+    """"""
+    Simple image transformation using one of two available filter functions:
+    Erosion and Dilation.
+
+    Args:
+        image: binarized input image, onto which to apply transformation
+        kind: Can be either 'erosion', in which case the :func:np.max
+              function is called, or 'dilation', when :func:np.min is used instead.
+        kernel: n x n kernel with shape < :attr:image.shape,
+              to be used when applying convolution to original image
+
+    Returns:
+        returns a numpy array with same shape as input image,
+        corresponding to applied binary transformation.
+
+    Examples:
+        >>> img = np.array([[1, 0.5], [0.2, 0.7]])
+        >>> img = binarize(img, threshold=0.5)
+        >>> transform(img, 'erosion')
+        array([[1, 1],
+               [1, 1]], dtype=uint8)
+        >>> transform(img, 'dilation')
+        array([[0, 0],
+               [0, 0]], dtype=uint8)
+    """"""
+    if kernel is None:
+        kernel = np.ones((3, 3))
+
+    if kind == ""erosion"":
+        constant = 1
+        apply = np.max
+    else:
+        constant = 0
+        apply = np.min
+
+    center_x, center_y = (x // 2 for x in kernel.shape)
+
+    # Use padded image when applying convolution
+    # to not go out of bounds of the original the image
+    transformed = np.zeros(image.shape, dtype=np.uint8)
+    padded = np.pad(image, 1, ""constant"", constant_values=constant)
+
+    for x in range(center_x, padded.shape[0] - center_x):
+        for y in range(center_y, padded.shape[1] - center_y):
+            center = padded[
+                x - center_x : x + center_x + 1, y - center_y : y + center_y + 1
+            ]
+            # Apply transformation method to the centered section of the image
+            transformed[x - center_x, y - center_y] = apply(center[kernel == 1])
+
+    return transformed",6,B,media,54,43
+rgb_to_cmyk,conversions\rgb_cmyk_conversion.py,1,65,"def rgb_to_cmyk(r_input: int, g_input: int, b_input: int) -> tuple[int, int, int, int]:
+    """"""
+    Simple RGB to CMYK conversion. Returns percentages of CMYK paint.
+    https://www.programmingalgorithms.com/algorithm/rgb-to-cmyk/
+
+    Note: this is a very popular algorithm that converts colors linearly and gives
+    only approximate results. Actual preparation for printing requires advanced color
+    conversion considering the color profiles and parameters of the target device.
+
+    >>> rgb_to_cmyk(255, 200, ""a"")
+    Traceback (most recent call last):
+        ...
+    ValueError: Expected int, found (<class 'int'>, <class 'int'>, <class 'str'>)
+
+    >>> rgb_to_cmyk(255, 255, 999)
+    Traceback (most recent call last):
+        ...
+    ValueError: Expected int of the range 0..255
+
+    >>> rgb_to_cmyk(255, 255, 255)  # white
+    (0, 0, 0, 0)
+
+    >>> rgb_to_cmyk(128, 128, 128)  # gray
+    (0, 0, 0, 50)
+
+    >>> rgb_to_cmyk(0, 0, 0)    # black
+    (0, 0, 0, 100)
+
+    >>> rgb_to_cmyk(255, 0, 0)  # red
+    (0, 100, 100, 0)
+
+    >>> rgb_to_cmyk(0, 255, 0)  # green
+    (100, 0, 100, 0)
+
+    >>> rgb_to_cmyk(0, 0, 255)    # blue
+    (100, 100, 0, 0)
+    """"""
+
+    if (
+        not isinstance(r_input, int)
+        or not isinstance(g_input, int)
+        or not isinstance(b_input, int)
+    ):
+        msg = f""Expected int, found {type(r_input), type(g_input), type(b_input)}""
+        raise ValueError(msg)
+
+    if not 0 <= r_input < 256 or not 0 <= g_input < 256 or not 0 <= b_input < 256:
+        raise ValueError(""Expected int of the range 0..255"")
+
+    # changing range from 0..255 to 0..1
+    r = r_input / 255
+    g = g_input / 255
+    b = b_input / 255
+
+    k = 1 - max(r, g, b)
+
+    if k == 1:  # pure black
+        return 0, 0, 0, 100
+
+    c = round(100 * (1 - r - k) / (1 - k))
+    m = round(100 * (1 - g - k) / (1 - k))
+    y = round(100 * (1 - b - k) / (1 - k))
+    k = round(100 * k)
+
+    return c, m, y, k",8,B,media,65,48
+kth_largest_element,data_structures\arrays\kth_largest_element.py,44,111,"def kth_largest_element(arr: list[int], position: int) -> int:
+    """"""
+    Finds the kth largest element in a list.
+    Should deliver similar results to:
+    ```python
+    def kth_largest_element(arr, position):
+        return sorted(arr)[-position]
+    ```
+
+    Args:
+        nums: The list of numbers.
+        k: The position of the desired kth largest element.
+
+    Returns:
+        int: The kth largest element.
+
+    Examples:
+        >>> kth_largest_element([3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5], 3)
+        5
+        >>> kth_largest_element([2, 5, 6, 1, 9, 3, 8, 4, 7, 3, 5], 1)
+        9
+        >>> kth_largest_element([2, 5, 6, 1, 9, 3, 8, 4, 7, 3, 5], -2)
+        Traceback (most recent call last):
+        ...
+        ValueError: Invalid value of 'position'
+        >>> kth_largest_element([9, 1, 3, 6, 7, 9, 8, 4, 2, 4, 9], 110)
+        Traceback (most recent call last):
+        ...
+        ValueError: Invalid value of 'position'
+        >>> kth_largest_element([1, 2, 4, 3, 5, 9, 7, 6, 5, 9, 3], 0)
+        Traceback (most recent call last):
+        ...
+        ValueError: Invalid value of 'position'
+        >>> kth_largest_element(['apple', 'cherry', 'date', 'banana'], 2)
+        'cherry'
+        >>> kth_largest_element([3.1, 1.2, 5.6, 4.7,7.9,5,0], 2)
+        5.6
+        >>> kth_largest_element([-2, -5, -4, -1], 1)
+        -1
+        >>> kth_largest_element([], 1)
+        -1
+        >>> kth_largest_element([3.1, 1.2, 5.6, 4.7, 7.9, 5, 0], 1.5)
+        Traceback (most recent call last):
+        ...
+        ValueError: The position should be an integer
+        >>> kth_largest_element((4, 6, 1, 2), 4)
+        Traceback (most recent call last):
+        ...
+        TypeError: 'tuple' object does not support item assignment
+    """"""
+    if not arr:
+        return -1
+    if not isinstance(position, int):
+        raise ValueError(""The position should be an integer"")
+    if not 1 <= position <= len(arr):
+        raise ValueError(""Invalid value of 'position'"")
+    low, high = 0, len(arr) - 1
+    while low <= high:
+        if low > len(arr) - 1 or high < 0:
+            return -1
+        pivot_index = partition(arr, low, high)
+        if pivot_index == position - 1:
+            return arr[pivot_index]
+        elif pivot_index > position - 1:
+            high = pivot_index - 1
+        else:
+            low = pivot_index + 1
+    return -1",9,B,media,68,65
+longest_common_substring,dynamic_programming\longest_common_substring.py,13,64,"def longest_common_substring(text1: str, text2: str) -> str:
+    """"""
+    Finds the longest common substring between two strings.
+
+    >>> longest_common_substring("""", """")
+    ''
+    >>> longest_common_substring(""a"","""")
+    ''
+    >>> longest_common_substring("""", ""a"")
+    ''
+    >>> longest_common_substring(""a"", ""a"")
+    'a'
+    >>> longest_common_substring(""abcdef"", ""bcd"")
+    'bcd'
+    >>> longest_common_substring(""abcdef"", ""xabded"")
+    'ab'
+    >>> longest_common_substring(""GeeksforGeeks"", ""GeeksQuiz"")
+    'Geeks'
+    >>> longest_common_substring(""abcdxyz"", ""xyzabcd"")
+    'abcd'
+    >>> longest_common_substring(""zxabcdezy"", ""yzabcdezx"")
+    'abcdez'
+    >>> longest_common_substring(""OldSite:GeeksforGeeks.org"", ""NewSite:GeeksQuiz.com"")
+    'Site:Geeks'
+    >>> longest_common_substring(1, 1)
+    Traceback (most recent call last):
+        ...
+    ValueError: longest_common_substring() takes two strings for inputs
+    """"""
+
+    if not (isinstance(text1, str) and isinstance(text2, str)):
+        raise ValueError(""longest_common_substring() takes two strings for inputs"")
+
+    if not text1 or not text2:
+        return """"
+
+    text1_length = len(text1)
+    text2_length = len(text2)
+
+    dp = [[0] * (text2_length + 1) for _ in range(text1_length + 1)]
+    end_pos = 0
+    max_length = 0
+
+    for i in range(1, text1_length + 1):
+        for j in range(1, text2_length + 1):
+            if text1[i - 1] == text2[j - 1]:
+                dp[i][j] = 1 + dp[i - 1][j - 1]
+                if dp[i][j] > max_length:
+                    end_pos = i
+                    max_length = dp[i][j]
+
+    return text1[end_pos - max_length : end_pos]",10,B,media,52,45
+prim,graphs\basic_graphs.py,284,299,"def prim(g, s):
+    dist, known, path = {s: 0}, set(), {s: 0}
+    while True:
+        if len(known) == len(g) - 1:
+            break
+        mini = 100000
+        for key, value in dist.items():
+            if key not in known and value < mini:
+                mini = value
+                u = key
+        known.add(u)
+        for v in g[u]:
+            if v[0] not in known and v[1] < dist.get(v[0], 100000):
+                dist[v[0]] = v[1]
+                path[v[0]] = u
+    return dist",9,B,media,16,16
+search,graphs\bidirectional_breadth_first_search.py,130,155,"    def search(self) -> Path | None:
+        while self.fwd_bfs.node_queue or self.bwd_bfs.node_queue:
+            current_fwd_node = self.fwd_bfs.node_queue.pop(0)
+            current_bwd_node = self.bwd_bfs.node_queue.pop(0)
+
+            if current_bwd_node.pos == current_fwd_node.pos:
+                self.reached = True
+                return self.retrace_bidirectional_path(
+                    current_fwd_node, current_bwd_node
+                )
+
+            self.fwd_bfs.target = current_bwd_node
+            self.bwd_bfs.target = current_fwd_node
+
+            successors = {
+                self.fwd_bfs: self.fwd_bfs.get_successors(current_fwd_node),
+                self.bwd_bfs: self.bwd_bfs.get_successors(current_bwd_node),
+            }
+
+            for bfs in [self.fwd_bfs, self.bwd_bfs]:
+                for node in successors[bfs]:
+                    bfs.node_queue.append(node)
+
+        if not self.reached:
+            return [self.fwd_bfs.start.pos]
+        return None",7,B,media,26,21
+prims_algo,graphs\minimum_spanning_tree_prims2.py,220,269,"def prims_algo[T](
+    graph: GraphUndirectedWeighted[T],
+) -> tuple[dict[T, int], dict[T, T | None]]:
+    """"""
+    >>> graph = GraphUndirectedWeighted()
+
+    >>> graph.add_edge(""a"", ""b"", 3)
+    >>> graph.add_edge(""b"", ""c"", 10)
+    >>> graph.add_edge(""c"", ""d"", 5)
+    >>> graph.add_edge(""a"", ""c"", 15)
+    >>> graph.add_edge(""b"", ""d"", 100)
+
+    >>> dist, parent = prims_algo(graph)
+
+    >>> abs(dist[""a""] - dist[""b""])
+    3
+    >>> abs(dist[""d""] - dist[""b""])
+    15
+    >>> abs(dist[""a""] - dist[""c""])
+    13
+    """"""
+    # prim's algorithm for minimum spanning tree
+    dist: dict[T, int] = dict.fromkeys(graph.connections, maxsize)
+    parent: dict[T, T | None] = dict.fromkeys(graph.connections)
+
+    priority_queue: MinPriorityQueue[T] = MinPriorityQueue()
+    for node, weight in dist.items():
+        priority_queue.push(node, weight)
+
+    if priority_queue.is_empty():
+        return dist, parent
+
+    # initialization
+    node = priority_queue.extract_min()
+    dist[node] = 0
+    for neighbour in graph.connections[node]:
+        if dist[neighbour] > dist[node] + graph.connections[node][neighbour]:
+            dist[neighbour] = dist[node] + graph.connections[node][neighbour]
+            priority_queue.update_key(neighbour, dist[neighbour])
+            parent[neighbour] = node
+
+    # running prim's algorithm
+    while not priority_queue.is_empty():
+        node = priority_queue.extract_min()
+        for neighbour in graph.connections[node]:
+            if dist[neighbour] > dist[node] + graph.connections[node][neighbour]:
+                dist[neighbour] = dist[node] + graph.connections[node][neighbour]
+                priority_queue.update_key(neighbour, dist[neighbour])
+                parent[neighbour] = node
+    return dist, parent",8,B,media,50,40
+is_geometric_series,maths\series\geometric.py,10,43,"def is_geometric_series(series: list) -> bool:
+    """"""
+    checking whether the input series is geometric series or not
+    >>> is_geometric_series([2, 4, 8])
+    True
+    >>> is_geometric_series([3, 6, 12, 24])
+    True
+    >>> is_geometric_series([1, 2, 3])
+    False
+    >>> is_geometric_series([0, 0, 3])
+    False
+    >>> is_geometric_series([])
+    Traceback (most recent call last):
+        ...
+    ValueError: Input list must be a non empty list
+    >>> is_geometric_series(4)
+    Traceback (most recent call last):
+        ...
+    ValueError: Input series is not valid, valid series - [2, 4, 8]
+    """"""
+    if not isinstance(series, list):
+        raise ValueError(""Input series is not valid, valid series - [2, 4, 8]"")
+    if len(series) == 0:
+        raise ValueError(""Input list must be a non empty list"")
+    if len(series) == 1:
+        return True
+    try:
+        common_ratio = series[1] / series[0]
+        for index in range(len(series) - 1):
+            if series[index + 1] / series[index] != common_ratio:
+                return False
+    except ZeroDivisionError:
+        return False
+    return True",7,B,media,34,34
+put,other\lru_cache.py,266,295,"    def put(self, key: T, value: U) -> None:
+        """"""
+        Sets the value for the input key and updates the Double Linked List
+        """"""
+
+        if key not in self.cache:
+            if self.num_keys >= self.capacity:
+                # delete first node (oldest) when over capacity
+                first_node = self.list.head.next
+
+                # guaranteed to have a non-None first node when num_keys > 0
+                # explain to type checker via assertions
+                assert first_node is not None
+                assert first_node.key is not None
+                assert (
+                    self.list.remove(first_node) is not None
+                )  # node guaranteed to be in list assert node.key is not None
+
+                del self.cache[first_node.key]
+                self.num_keys -= 1
+            self.cache[key] = DoubleLinkedListNode(key, value)
+            self.list.add(self.cache[key])
+            self.num_keys += 1
+
+        else:
+            # bump node to the end of the list, update value
+            node = self.list.remove(self.cache[key])
+            assert node is not None  # node guaranteed to be in list
+            node.val = value
+            self.list.add(node)",7,B,media,30,22
+majority_vote,other\majority_vote_algorithm.py,11,32,"def majority_vote(votes: list[int], votes_needed_to_win: int) -> list[int]:
+    """"""
+    >>> majority_vote([1, 2, 2, 3, 1, 3, 2], 3)
+    [2]
+    >>> majority_vote([1, 2, 2, 3, 1, 3, 2], 2)
+    []
+    >>> majority_vote([1, 2, 2, 3, 1, 3, 2], 4)
+    [1, 2, 3]
+    """"""
+    majority_candidate_counter: Counter[int] = Counter()
+    for vote in votes:
+        majority_candidate_counter[vote] += 1
+        if len(majority_candidate_counter) == votes_needed_to_win:
+            majority_candidate_counter -= Counter(set(majority_candidate_counter))
+    majority_candidate_counter = Counter(
+        vote for vote in votes if vote in majority_candidate_counter
+    )
+    return [
+        vote
+        for vote in majority_candidate_counter
+        if majority_candidate_counter[vote] > len(votes) / votes_needed_to_win
+    ]",7,B,media,22,22
