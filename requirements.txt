@@ -1,0 +1,6 @@
+radon
+pytest
+coverage
+pandas
+openpyxl
+python-dotenv
