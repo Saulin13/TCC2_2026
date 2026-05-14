@@ -9,7 +9,7 @@ import pandas as pd
 # Exemplo: BASE_REPO_PATH = Path("repos/Python")
 BASE_REPO_PATH = Path("repos/Python")
 
-OUTPUT_CSV_PATH = Path("data/raw/functions_extracted.csv")
+OUTPUT_CSV_PATH = Path("data/raw/functions_extracpip install pandas radonpython scripts/02_measure_complexity.pyted.csv")
 IGNORED_DIR_KEYWORDS = ("test", "tests")
 IGNORED_FILE_PREFIX = "test_"
 
