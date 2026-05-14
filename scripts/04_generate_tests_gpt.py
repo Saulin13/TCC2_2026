@@ -7,7 +7,7 @@ INPUT_SAMPLE = Path("data/selected_functions/pilot_sample_30.csv")
 OUTPUT_TESTS_DIR = Path("tests/generated_tests")
 
 # COLOQUE A CHAVE QUE VOCÊ ACABOU DE COPIAR AQUI
-client = OpenAI(api_key="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")
+client = OpenAI(api_key="CHAVE_FICA_AQUI")
 
 def generate_test_with_gpt(function_code, complexity):
     prompt = f"Gere um teste unitário em pytest para esta função (Complexidade {complexity}):\n\n{function_code}\n\nRetorne apenas o código."

@@ -11,7 +11,7 @@ TESTS_DIR = BASE_DIR / "tests" / "generated_tests"
 OUTPUT_EVAL = BASE_DIR / "data" / "results" / "evaluation_results.csv"
 
 # Sua chave API (mantenha a que você já está usando)
-client = openai.OpenAI(api_key="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")
+client = openai.OpenAI(api_key="CHAVE_FICA_AQUI")
 
 def evaluate_test(func_code, test_code, coverage):
     prompt = f"""
