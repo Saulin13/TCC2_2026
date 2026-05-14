@@ -25,7 +25,17 @@ def main():
 
     # 1. Carregar Dados
     df = pd.read_csv(INPUT_EVAL)
-    df['nota'] = df['evaluation'].apply(extract_nota)
+    if "overall_score" in df.columns:
+        df["nota"] = pd.to_numeric(df["overall_score"], errors="coerce").fillna(0.0)
+    elif "evaluation" in df.columns:
+        df["nota"] = df["evaluation"].apply(extract_nota)
+    else:
+        df["nota"] = 0.0
+
+    if "coverage_percent" in df.columns:
+        df["coverage"] = pd.to_numeric(df["coverage_percent"], errors="coerce").fillna(0.0)
+    elif "coverage" not in df.columns:
+        df["coverage"] = 0.0
     
     # Filtra apenas quem tem nota maior que 0 para o gráfico não ficar poluído
     df_plot = df[df['nota'] > 0].copy()
@@ -35,9 +45,10 @@ def main():
     
     # --- GRÁFICO 1: Cobertura vs Nota ---
     plt.figure(figsize=(10, 6))
+    cov_col = "coverage_percent" if "coverage_percent" in df_plot.columns else "coverage"
     sns.regplot(
-        data=df_plot, 
-        x='coverage', 
+        data=df_plot,
+        x=cov_col,
         y='nota', 
         scatter_kws={'s': 100, 'alpha': 0.6, 'color': '#2c3e50'},
         line_kws={'color': '#e74c3c'}

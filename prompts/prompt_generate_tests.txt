@@ -1,0 +1,16 @@
+You are a senior Python engineer. Write pytest unit tests for the function named "{func_name}".
+
+Requirements:
+- Only test the function "{func_name}".
+- Cover normal cases, edge cases, and at least one failure/exception path if applicable.
+- Use pytest style.
+- Do not use unittest.TestCase.
+- Do not use sys.path.append or absolute paths.
+- Do not copy or redefine the target function.
+- Import the function using this module path: from {module_path} import {func_name}
+- Use concrete assertions with realistic inputs and expected outputs.
+- Do not use placeholders like /* input */ or TODO.
+- Return only valid Python code, without markdown or explanations.
+
+Function source code:
+{file_code}
