@@ -17,13 +17,13 @@ def test_floy_normal_case():
     ]
     assert floy((a, n)) == expected_output
 
-def test_floy_edge_case_single_node():
+def test_floy_single_node():
     a = [[0]]
     n = 1
     expected_output = [[0]]
     assert floy((a, n)) == expected_output
 
-def test_floy_edge_case_no_path():
+def test_floy_no_path():
     a = [
         [0, float('inf')],
         [float('inf'), 0]
@@ -35,18 +35,25 @@ def test_floy_edge_case_no_path():
     ]
     assert floy((a, n)) == expected_output
 
-def test_floy_failure_case_negative_cycle():
+def test_floy_negative_cycle():
     a = [
         [0, 1, float('inf')],
         [float('inf'), 0, -1],
         [-1, float('inf'), 0]
     ]
     n = 3
-    # The function does not handle negative cycles, so we expect incorrect results
-    with pytest.raises(AssertionError):
-        expected_output = [
-            [0, 1, 0],
-            [float('inf'), 0, -1],
-            [-1, 0, 0]
-        ]
-        assert floy((a, n)) == expected_output
+    expected_output = [
+        [0, 1, 0],
+        [-1, 0, -1],
+        [-2, -1, 0]
+    ]
+    assert floy((a, n)) == expected_output
+
+def test_floy_invalid_input():
+    a = [
+        [0, 1],
+        [1, 0, 2]
+    ]
+    n = 2
+    with pytest.raises(IndexError):
+        floy((a, n))

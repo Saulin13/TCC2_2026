@@ -2,5 +2,6 @@ radon
 pytest
 coverage
 pandas
+matplotlib
 openpyxl
 python-dotenv

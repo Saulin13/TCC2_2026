@@ -10,13 +10,13 @@ def test_dijk_normal_case():
         5: [(4, 6), (6, 9)],
         6: [(1, 14), (3, 2), (5, 9)]
     }
-    # Expected output distances from node 1 to others
+    # Expected shortest distances from node 1 to others
     expected_output = [7, 9, 20, 20]
     assert dijk(graph, 1) == expected_output
 
 def test_dijk_single_node():
     graph = {1: []}
-    # No other nodes to reach, so no distances to print
+    # No other nodes, so no distances to print
     expected_output = []
     assert dijk(graph, 1) == expected_output
 
@@ -27,7 +27,7 @@ def test_dijk_disconnected_graph():
         3: [(4, 1)],
         4: [(3, 1)]
     }
-    # Nodes 3 and 4 are disconnected from 1, so they should not appear in the output
+    # Nodes 3 and 4 are disconnected from 1, so no distances to them
     expected_output = [1]
     assert dijk(graph, 1) == expected_output
 

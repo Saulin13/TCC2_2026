@@ -11,7 +11,8 @@ def test_heap_sort_edge_cases():
     assert heap_sort([]) == []
     assert heap_sort([1]) == [1]
     assert heap_sort([2, 1]) == [1, 2]
-    assert heap_sort([1, 1, 1, 1]) == [1, 1, 1, 1]
+    assert heap_sort([1, 2, 3, 4, 5]) == [1, 2, 3, 4, 5]
+    assert heap_sort([5, 4, 3, 2, 1]) == [1, 2, 3, 4, 5]
 
 def test_heap_sort_failure_case():
     with pytest.raises(TypeError):

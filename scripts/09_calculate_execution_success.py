@@ -3,7 +3,7 @@ from pathlib import Path
 
 # Configuração de caminhos
 BASE_DIR = Path(__file__).parent.parent.absolute()
-INPUT_EVAL = BASE_DIR / "data" / "results" / "evaluation_results.csv"
+INPUT_EVAL = BASE_DIR / "data" / "results" / "evaluation_results_gpt.csv"
 OUTPUT_DIR = BASE_DIR / "data" / "results"
 
 def categorizar_sucesso(row):
@@ -27,11 +27,11 @@ def categorizar_sucesso(row):
         return "Falha de Execução (Runtime/Assertion Error)"
 
 def main():
-    print("📊 Iniciando classificação da Taxa de Sucesso e Execução dos testes Python...")
+    print("Iniciando classificação da Taxa de Sucesso e Execução dos testes Python...")
     
     if not INPUT_EVAL.exists():
-        print(f"❌ Erro: Arquivo base {INPUT_EVAL} não encontrado.")
-        print("💡 Certifique-se de que o arquivo 'evaluation_results.csv' existe na pasta data/results/.")
+        print(f"Erro: Arquivo base {INPUT_EVAL} não encontrado.")
+        print("Certifique-se de que o arquivo 'evaluation_results_gpt.csv' existe na pasta data/results/.")
         return
 
     df = pd.read_csv(INPUT_EVAL)
@@ -47,10 +47,10 @@ def main():
     
     # Salva os resultados das categorias
     df_resultado.to_csv(OUTPUT_DIR / "metric_execution_success.csv", index=False)
-    print(f"✅ Métrica de Taxa de Sucesso salva em: {OUTPUT_DIR / 'metric_execution_success.csv'}")
+    print(f"Métrica de Taxa de Sucesso salva em: {OUTPUT_DIR / 'metric_execution_success.csv'}")
     
     # Exibe um resumo percentual na tela para o seu TCC
-    print("\n📈 Resumo Geral da Taxa de Sucesso da IA:")
+    print("\nResumo Geral da Taxa de Sucesso da IA:")
     resumo = df['execution_category'].value_counts(normalize=True) * 100
     for cat, val in resumo.items():
         print(f" - {cat}: {val:.2f}%")

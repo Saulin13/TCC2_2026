@@ -17,9 +17,9 @@ def test_dynamic_lucas_number_edge_cases():
     assert dynamic_lucas_number(1) == 1
 
 def test_dynamic_lucas_number_invalid_input():
-    with pytest.raises(TypeError, match="dynamic_lucas_number accepts only integer arguments."):
+    with pytest.raises(TypeError):
         dynamic_lucas_number(-1.5)
-    with pytest.raises(TypeError, match="dynamic_lucas_number accepts only integer arguments."):
+    with pytest.raises(TypeError):
         dynamic_lucas_number("string")
-    with pytest.raises(TypeError, match="dynamic_lucas_number accepts only integer arguments."):
+    with pytest.raises(TypeError):
         dynamic_lucas_number(None)

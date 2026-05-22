@@ -12,19 +12,13 @@ def test_find_previous_power_of_two_normal_cases():
     assert find_previous_power_of_two(7) == 4
     assert find_previous_power_of_two(8) == 8
     assert find_previous_power_of_two(9) == 8
-    assert find_previous_power_of_two(10) == 8
-    assert find_previous_power_of_two(15) == 8
     assert find_previous_power_of_two(16) == 16
     assert find_previous_power_of_two(17) == 16
 
-def test_find_previous_power_of_two_large_number():
-    assert find_previous_power_of_two(1023) == 512
+def test_find_previous_power_of_two_edge_cases():
     assert find_previous_power_of_two(1024) == 1024
     assert find_previous_power_of_two(1025) == 1024
-
-def test_find_previous_power_of_two_edge_cases():
-    assert find_previous_power_of_two(0) == 0
-    assert find_previous_power_of_two(1) == 1
+    assert find_previous_power_of_two(2048) == 2048
 
 def test_find_previous_power_of_two_invalid_input():
     with pytest.raises(ValueError, match="Input must be a non-negative integer"):

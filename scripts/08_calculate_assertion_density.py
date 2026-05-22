@@ -28,10 +28,10 @@ def calcular_metricas_codigo(caminho_arquivo):
     return total_loc, total_assercoes
 
 def main():
-    print("🔍 Iniciando cálculo de Densidade de Asserções nos testes Python...")
+    print("Iniciando cálculo de Densidade de Asserções nos testes Python...")
     
     if not TESTS_DIR.exists():
-        print(f"❌ Erro: Diretório de testes não encontrado em {TESTS_DIR}")
+        print(f"Erro: Diretório de testes não encontrado em {TESTS_DIR}")
         return
 
     resultados = []
@@ -54,12 +54,12 @@ def main():
                 })
 
     if not resultados:
-        print("⚠️ Nenhum arquivo test_*.py encontrado para análise.")
+        print("Nenhum arquivo test_*.py encontrado para análise.")
         return
 
     df = pd.DataFrame(resultados)
     df.to_csv(OUTPUT_DIR / "metric_assertion_density.csv", index=False)
-    print(f"✅ Métrica de Densidade de Asserções salva em: {OUTPUT_DIR / 'metric_assertion_density.csv'}")
+    print(f"Métrica de Densidade de Asserções salva em: {OUTPUT_DIR / 'metric_assertion_density.csv'}")
 
 if __name__ == "__main__":
     main()

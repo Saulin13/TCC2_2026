@@ -13,17 +13,13 @@ def test_find_missing_number_with_negative_numbers():
     assert find_missing_number([-2, 2, 1, 3, 0]) == -1
 
 def test_find_missing_number_single_element():
-    assert find_missing_number([1]) == 0
     assert find_missing_number([0]) == 1
+    assert find_missing_number([1]) == 0
 
 def test_find_missing_number_no_missing_number():
-    assert find_missing_number([0, 1, 2, 3, 4]) == 5
-    assert find_missing_number([-2, -1, 0, 1, 2]) == 3
+    with pytest.raises(IndexError):
+        find_missing_number([0, 1, 2, 3, 4])
 
 def test_find_missing_number_empty_list():
     with pytest.raises(ValueError):
         find_missing_number([])
-
-def test_find_missing_number_non_consecutive():
-    with pytest.raises(ValueError):
-        find_missing_number([1, 2, 4, 7])

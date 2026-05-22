@@ -1,6 +1,8 @@
 import json
 import math
+import os
 import re
+import unicodedata
 from pathlib import Path
 
 import pandas as pd
@@ -12,11 +14,58 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 PROMPT_TEMPLATE_PATH = BASE_DIR / "prompts" / "prompt_evaluate_tests.txt"
 INPUT_COVERAGE = BASE_DIR / "data" / "results" / "coverage_results.csv"
 SAMPLE_FILE = BASE_DIR / "data" / "selected_functions" / "pilot_sample_30.csv"
-OUTPUT_EVAL = BASE_DIR / "data" / "results" / "evaluation_results.csv"
+OUTPUT_EVAL = BASE_DIR / "data" / "results" / "evaluation_results_gpt.csv"
 
-MODEL_NAME = "gpt-4o"
-MAX_EVALUATIONS = 10
+MODEL_NAME = "gpt-4o"  # padrão; sobrescrito por OPENAI_MODEL no .env
 EXEC_LOG_MAX_CHARS = 4000
+RANDOM_SEED = 42
+SAMPLE_BY_LEVEL = {"baixa": 4, "media": 3, "alta": 3}
+MERGE_KEYS = ("function_name", "file_path")
+
+
+def resolve_model_name() -> str:
+    """Modelo OpenAI: variável de ambiente OPENAI_MODEL ou padrão do script."""
+    return (os.getenv("OPENAI_MODEL") or os.getenv("MODEL_NAME") or MODEL_NAME).strip()
+
+
+def _normalize_text(value: str) -> str:
+    if not isinstance(value, str):
+        return ""
+    normalized = unicodedata.normalize("NFKD", value)
+    without_accents = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    return without_accents.strip().lower()
+
+
+def normalize_complexity_level(value: object) -> str:
+    """Mapeia rótulos de complexidade para baixa/media/alta."""
+    norm = _normalize_text(str(value) if value is not None else "")
+    if norm in {"baixa", "low"}:
+        return "baixa"
+    if norm in {"media", "medium"}:
+        return "media"
+    if norm in {"alta", "high"}:
+        return "alta"
+    return norm
+
+
+def select_balanced_sample(df: pd.DataFrame) -> pd.DataFrame:
+    """Seleciona amostra balanceada: 4 baixa, 3 média, 3 alta."""
+    work = df.copy()
+    work["complexity_level"] = work["complexity_level"].apply(normalize_complexity_level)
+    parts: list[pd.DataFrame] = []
+    for level, target in SAMPLE_BY_LEVEL.items():
+        pool = work[work["complexity_level"] == level]
+        available = len(pool)
+        if available < target:
+            print(f"Aviso: apenas {available} registro(s) em '{level}' (alvo: {target}).")
+        k = min(target, available)
+        if k == 0:
+            continue
+        parts.append(pool.sample(n=k, random_state=RANDOM_SEED))
+    if not parts:
+        return work.iloc[0:0]
+    return pd.concat(parts, ignore_index=True)
+
 
 def _parse_passed(val: object) -> bool:
     if isinstance(val, bool):
@@ -115,8 +164,7 @@ def _parse_scores(raw: str) -> tuple[dict[str, object], str | None]:
 
 
 def _row_from_evaluation(
-    cov_row: pd.Series,
-    sample_row: pd.Series,
+    row: pd.Series,
     scores: dict[str, object],
     err: str | None,
 ) -> dict[str, object]:
@@ -138,15 +186,15 @@ def _row_from_evaluation(
         return "" if v is None else str(v)
 
     return {
-        "function_name": cov_row["function_name"],
-        "file_path": cov_row["file_path"],
-        "complexity_score": cov_row.get("complexity_score", sample_row.get("complexity_score")),
-        "complexity_level": cov_row.get("complexity_level", sample_row.get("complexity_level")),
-        "test_file": cov_row["test_file"],
-        "execution_status": cov_row["execution_status"],
-        "passed": _parse_passed(cov_row["passed"]),
-        "return_code": _parse_return_code(cov_row["return_code"]),
-        "coverage_percent": float(cov_row["coverage_percent"]) if pd.notna(cov_row["coverage_percent"]) else 0.0,
+        "function_name": row["function_name"],
+        "file_path": row["file_path"],
+        "complexity_score": row.get("complexity_score"),
+        "complexity_level": row.get("complexity_level"),
+        "test_file": row["test_file"],
+        "execution_status": row["execution_status"],
+        "passed": _parse_passed(row["passed"]),
+        "return_code": _parse_return_code(row["return_code"]),
+        "coverage_percent": float(row["coverage_percent"]) if pd.notna(row["coverage_percent"]) else 0.0,
         "correctness_score": fnum("correctness_score"),
         "scenario_coverage_score": fnum("scenario_coverage_score"),
         "edge_cases_score": fnum("edge_cases_score"),
@@ -159,27 +207,36 @@ def _row_from_evaluation(
     }
 
 
-def evaluate_one(client: OpenAI, template: str, cov_row: pd.Series, sample_row: pd.Series) -> dict[str, object]:
-    test_rel = Path(str(cov_row["test_file"]))
+def evaluate_one(
+    client: OpenAI,
+    template: str,
+    row: pd.Series,
+    *,
+    model: str,
+) -> dict[str, object]:
+    test_rel = Path(str(row["test_file"]))
     test_path = (BASE_DIR / test_rel).resolve() if not test_rel.is_absolute() else test_rel
 
-    source_code = sample_row["source_code"]
+    source_code = row.get("source_code")
+    if not isinstance(source_code, str) or not source_code.strip():
+        source_code = "(código-fonte não encontrado no pilot_sample_30.csv)"
+
     if test_path.is_file():
         test_code = test_path.read_text(encoding="utf-8")
     else:
-        test_code = f"(arquivo de teste não encontrado: {cov_row['test_file']})"
+        test_code = f"(arquivo de teste não encontrado: {row['test_file']})"
 
-    prompt = _fill_prompt(template, cov_row, source_code=source_code, test_code=test_code)
+    prompt = _fill_prompt(template, row, source_code=source_code, test_code=test_code)
 
     response = client.chat.completions.create(
-        model=MODEL_NAME,
+        model=model,
         messages=[{"role": "user", "content": prompt}],
         response_format={"type": "json_object"},
         temperature=0.2,
     )
     raw = response.choices[0].message.content or ""
     scores, parse_err = _parse_scores(raw)
-    return _row_from_evaluation(cov_row, sample_row, scores, parse_err)
+    return _row_from_evaluation(row, scores, parse_err)
 
 
 def main():
@@ -197,37 +254,44 @@ def main():
 
     template = PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
     client = OpenAI()
+    model = resolve_model_name()
 
-    df_cov = pd.read_csv(INPUT_COVERAGE).head(MAX_EVALUATIONS).reset_index(drop=True)
-    df_sample = pd.read_csv(SAMPLE_FILE).reset_index(drop=True)
-
-    n = len(df_cov)
+    df_cov = pd.read_csv(INPUT_COVERAGE)
+    df_selected = select_balanced_sample(df_cov)
+    n = len(df_selected)
     if n == 0:
-        print("Nenhuma linha em coverage_results.csv para avaliar.")
+        print("Nenhuma linha elegível em coverage_results.csv para avaliar.")
         return
-    if len(df_sample) < n:
-        print(f"Aviso: pilot_sample tem menos linhas ({len(df_sample)}) que o lote ({n}).")
-        n = min(n, len(df_sample))
-        df_cov = df_cov.iloc[:n].reset_index(drop=True)
+
+    df_sample = pd.read_csv(SAMPLE_FILE)
+    df_eval = df_selected.merge(
+        df_sample[list(MERGE_KEYS) + ["source_code"]],
+        on=list(MERGE_KEYS),
+        how="left",
+    )
+    missing_source = df_eval["source_code"].isna().sum()
+    if missing_source:
+        print(f"Aviso: {missing_source} função(ões) sem source_code no pilot_sample_30.csv.")
+
+    expected = sum(SAMPLE_BY_LEVEL.values())
+    print(
+        f"Amostra balanceada: {n} de {expected} "
+        f"({', '.join(f'{level}={count}' for level, count in df_eval['complexity_level'].value_counts().items())})"
+    )
+    print(f"Modelo OpenAI: {model}")
+    print(f"Iniciando avaliação LLM de {n} entradas...")
 
     rows: list[dict[str, object]] = []
-    print(f"Iniciando avaliação LLM das primeiras {n} entradas...")
-
     for i in range(n):
-        cov_row = df_cov.iloc[i]
-        sample_row = df_sample.iloc[i]
-        name = cov_row["function_name"]
-        print(f"[{i + 1}/{n}] {name}...")
+        row = df_eval.iloc[i]
+        name = row["function_name"]
+        level = row["complexity_level"]
+        print(f"[{i + 1}/{n}] {name} ({level})...")
 
         try:
-            row_out = evaluate_one(client, template, cov_row, sample_row)
+            row_out = evaluate_one(client, template, row, model=model)
         except Exception as e:
-            row_out = _row_from_evaluation(
-                cov_row,
-                sample_row,
-                {},
-                f"Erro na API: {e}",
-            )
+            row_out = _row_from_evaluation(row, {}, f"Erro na API: {e}")
         rows.append(row_out)
 
     out_df = pd.DataFrame(rows)[OUTPUT_COLUMNS]

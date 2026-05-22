@@ -10,7 +10,7 @@ def test_longest_subsequence_normal_cases():
 def test_longest_subsequence_edge_cases():
     assert longest_subsequence([1, 1, 1]) == [1, 1, 1]
     assert longest_subsequence([]) == []
-    assert longest_subsequence([1]) == [1]
+    assert longest_subsequence([5]) == [5]
     assert longest_subsequence([1, 2, 3, 4, 5]) == [1, 2, 3, 4, 5]
     assert longest_subsequence([5, 4, 3, 2, 1]) == [1]
 
@@ -20,4 +20,4 @@ def test_longest_subsequence_failure_cases():
     with pytest.raises(TypeError):
         longest_subsequence("not a list")
     with pytest.raises(TypeError):
-        longest_subsequence([1, "two", 3])
+        longest_subsequence([1, 2, "three", 4])

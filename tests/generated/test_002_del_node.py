@@ -1,62 +1,119 @@
 import pytest
 from data_structures.binary_tree.avl_tree import del_node
-from data_structures.binary_tree.avl_tree import MyNode, get_left_most, get_height, left_rotation, rl_rotation, right_rotation, lr_rotation, my_max
 
-def create_avl_tree():
-    # Helper function to create a sample AVL tree
-    root = MyNode(10)
-    root.set_left(MyNode(5))
-    root.set_right(MyNode(15))
-    root.get_left().set_left(MyNode(3))
-    root.get_left().set_right(MyNode(7))
-    root.get_right().set_left(MyNode(12))
-    root.get_right().set_right(MyNode(18))
-    return root
+class MyNode:
+    def __init__(self, data, left=None, right=None, height=1):
+        self.data = data
+        self.left = left
+        self.right = right
+        self.height = height
 
-def test_del_node_normal_case():
-    root = create_avl_tree()
-    new_root = del_node(root, 5)
-    assert new_root.get_data() == 10
-    assert new_root.get_left().get_data() == 7
-    assert new_root.get_left().get_left().get_data() == 3
+    def get_data(self):
+        return self.data
 
-def test_del_node_leaf_node():
-    root = create_avl_tree()
-    new_root = del_node(root, 3)
-    assert new_root.get_data() == 10
-    assert new_root.get_left().get_data() == 5
-    assert new_root.get_left().get_left() is None
+    def set_data(self, data):
+        self.data = data
 
-def test_del_node_root_node():
-    root = create_avl_tree()
-    new_root = del_node(root, 10)
-    assert new_root.get_data() == 12
-    assert new_root.get_right().get_data() == 15
+    def get_left(self):
+        return self.left
 
-def test_del_node_non_existent():
-    root = create_avl_tree()
-    new_root = del_node(root, 100)
-    assert new_root.get_data() == 10
-    assert new_root.get_right().get_right().get_data() == 18
+    def set_left(self, left):
+        self.left = left
 
-def test_del_node_single_node_tree():
-    root = MyNode(10)
-    new_root = del_node(root, 10)
-    assert new_root is None
+    def get_right(self):
+        return self.right
 
-def test_del_node_empty_tree():
-    new_root = del_node(None, 10)
-    assert new_root is None
+    def set_right(self, right):
+        self.right = right
 
-def test_del_node_causes_rotation():
-    root = MyNode(30)
-    root.set_left(MyNode(20))
-    root.set_right(MyNode(40))
-    root.get_left().set_left(MyNode(10))
-    root.get_left().set_right(MyNode(25))
-    root.get_left().get_left().set_left(MyNode(5))
-    
-    new_root = del_node(root, 40)
-    assert new_root.get_data() == 20
-    assert new_root.get_right().get_data() == 30
-    assert new_root.get_left().get_data() == 10
+    def get_height(self):
+        return self.height
+
+    def set_height(self, height):
+        self.height = height
+
+def get_left_most(node):
+    current = node
+    while current.get_left() is not None:
+        current = current.get_left()
+    return current.get_data()
+
+def get_height(node):
+    if node is None:
+        return 0
+    return node.get_height()
+
+def left_rotation(node):
+    right_child = node.get_right()
+    node.set_right(right_child.get_left())
+    right_child.set_left(node)
+    node.set_height(my_max(get_height(node.get_left()), get_height(node.get_right())) + 1)
+    right_child.set_height(my_max(get_height(right_child.get_left()), get_height(right_child.get_right())) + 1)
+    return right_child
+
+def right_rotation(node):
+    left_child = node.get_left()
+    node.set_left(left_child.get_right())
+    left_child.set_right(node)
+    node.set_height(my_max(get_height(node.get_left()), get_height(node.get_right())) + 1)
+    left_child.set_height(my_max(get_height(left_child.get_left()), get_height(left_child.get_right())) + 1)
+    return left_child
+
+def rl_rotation(node):
+    node.set_right(right_rotation(node.get_right()))
+    return left_rotation(node)
+
+def lr_rotation(node):
+    node.set_left(left_rotation(node.get_left()))
+    return right_rotation(node)
+
+def my_max(a, b):
+    return a if a > b else b
+
+@pytest.fixture
+def avl_tree():
+    # Create a simple AVL tree for testing
+    node1 = MyNode(1)
+    node3 = MyNode(3)
+    node2 = MyNode(2, node1, node3)
+    node5 = MyNode(5)
+    node4 = MyNode(4, node2, node5)
+    return node4
+
+def test_del_node_normal_case(avl_tree):
+    # Delete a node with two children
+    new_root = del_node(avl_tree, 2)
+    assert new_root.get_data() == 4
+    assert new_root.get_left().get_data() == 3
+    assert new_root.get_left().get_left().get_data() == 1
+    assert new_root.get_right().get_data() == 5
+
+def test_del_node_leaf(avl_tree):
+    # Delete a leaf node
+    new_root = del_node(avl_tree, 1)
+    assert new_root.get_data() == 4
+    assert new_root.get_left().get_data() == 2
+    assert new_root.get_left().get_right().get_data() == 3
+    assert new_root.get_right().get_data() == 5
+
+def test_del_node_single_child(avl_tree):
+    # Delete a node with a single child
+    new_root = del_node(avl_tree, 5)
+    assert new_root.get_data() == 4
+    assert new_root.get_left().get_data() == 2
+    assert new_root.get_right() is None
+
+def test_del_node_root(avl_tree):
+    # Delete the root node
+    new_root = del_node(avl_tree, 4)
+    assert new_root.get_data() == 3
+    assert new_root.get_left().get_data() == 2
+    assert new_root.get_left().get_left().get_data() == 1
+    assert new_root.get_right().get_data() == 5
+
+def test_del_node_non_existent(avl_tree):
+    # Try to delete a non-existent node
+    new_root = del_node(avl_tree, 10)
+    assert new_root.get_data() == 4
+    assert new_root.get_left().get_data() == 2
+    assert new_root.get_right().get_data() == 5
