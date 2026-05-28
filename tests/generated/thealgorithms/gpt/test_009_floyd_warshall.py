@@ -49,10 +49,12 @@ def test_floyd_warshall_negative_cycle():
     result, _ = floyd_warshall(graph, 3)
     assert result == expected
 
-def test_floyd_warshall_invalid_graph():
-    graph = [
-        [0, 1],
-        [1, 0, 2]  # Invalid row length
-    ]
-    with pytest.raises(IndexError):
-        floyd_warshall(graph, 2)
+def test_floyd_warshall_invalid_input():
+    with pytest.raises(TypeError):
+        floyd_warshall(None, 0)
+
+def test_floyd_warshall_empty_graph():
+    graph = []
+    expected = []
+    result, _ = floyd_warshall(graph, 0)
+    assert result == expected

@@ -26,6 +26,13 @@ def test_spiral_print_clockwise_single_column(capsys):
     expected_output = "1\n2\n3\n4\n"
     assert captured.out == expected_output
 
+def test_spiral_print_clockwise_single_element(capsys):
+    matrix = [[1]]
+    spiral_print_clockwise(matrix)
+    captured = capsys.readouterr()
+    expected_output = "1\n"
+    assert captured.out == expected_output
+
 def test_spiral_print_clockwise_empty_matrix(capsys):
     matrix = []
     spiral_print_clockwise(matrix)
@@ -33,16 +40,16 @@ def test_spiral_print_clockwise_empty_matrix(capsys):
     expected_output = "Not a valid matrix\n"
     assert captured.out == expected_output
 
-def test_spiral_print_clockwise_non_rectangular_matrix(capsys):
-    matrix = [[1, 2, 3], [4, 5], [6, 7, 8]]
+def test_spiral_print_clockwise_invalid_matrix(capsys):
+    matrix = [[1, 2], [3]]
     spiral_print_clockwise(matrix)
     captured = capsys.readouterr()
     expected_output = "Not a valid matrix\n"
     assert captured.out == expected_output
 
-def test_spiral_print_clockwise_single_element(capsys):
-    matrix = [[1]]
+def test_spiral_print_clockwise_non_matrix_input(capsys):
+    matrix = [1, 2, 3]
     spiral_print_clockwise(matrix)
     captured = capsys.readouterr()
-    expected_output = "1\n"
+    expected_output = "Not a valid matrix\n"
     assert captured.out == expected_output

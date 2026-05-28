@@ -6,32 +6,55 @@ class ListNode:
         self.val = val
         self.next_node = next_node
 
-def test_is_palindrome_stack_empty_list():
-    assert is_palindrome_stack(None) == True
+@pytest.fixture
+def create_linked_list():
+    def _create_linked_list(values):
+        if not values:
+            return None
+        head = ListNode(values[0])
+        current = head
+        for value in values[1:]:
+            current.next_node = ListNode(value)
+            current = current.next_node
+        return head
+    return _create_linked_list
 
-def test_is_palindrome_stack_single_element():
-    assert is_palindrome_stack(ListNode(1)) == True
+def test_is_palindrome_stack_empty(create_linked_list):
+    head = create_linked_list([])
+    assert is_palindrome_stack(head) == True
 
-def test_is_palindrome_stack_two_elements_palindrome():
-    assert is_palindrome_stack(ListNode(1, ListNode(1))) == True
+def test_is_palindrome_stack_single_element(create_linked_list):
+    head = create_linked_list([1])
+    assert is_palindrome_stack(head) == True
 
-def test_is_palindrome_stack_two_elements_non_palindrome():
-    assert is_palindrome_stack(ListNode(1, ListNode(2))) == False
+def test_is_palindrome_stack_two_elements_palindrome(create_linked_list):
+    head = create_linked_list([1, 1])
+    assert is_palindrome_stack(head) == True
 
-def test_is_palindrome_stack_odd_length_palindrome():
-    assert is_palindrome_stack(ListNode(1, ListNode(2, ListNode(1)))) == True
+def test_is_palindrome_stack_two_elements_non_palindrome(create_linked_list):
+    head = create_linked_list([1, 2])
+    assert is_palindrome_stack(head) == False
 
-def test_is_palindrome_stack_even_length_palindrome():
-    assert is_palindrome_stack(ListNode(1, ListNode(2, ListNode(2, ListNode(1))))) == True
+def test_is_palindrome_stack_odd_elements_palindrome(create_linked_list):
+    head = create_linked_list([1, 2, 1])
+    assert is_palindrome_stack(head) == True
 
-def test_is_palindrome_stack_odd_length_non_palindrome():
-    assert is_palindrome_stack(ListNode(1, ListNode(2, ListNode(3)))) == False
+def test_is_palindrome_stack_even_elements_palindrome(create_linked_list):
+    head = create_linked_list([1, 2, 2, 1])
+    assert is_palindrome_stack(head) == True
 
-def test_is_palindrome_stack_even_length_non_palindrome():
-    assert is_palindrome_stack(ListNode(1, ListNode(2, ListNode(3, ListNode(4))))) == False
+def test_is_palindrome_stack_odd_elements_non_palindrome(create_linked_list):
+    head = create_linked_list([1, 2, 3])
+    assert is_palindrome_stack(head) == False
 
-def test_is_palindrome_stack_long_palindrome():
-    assert is_palindrome_stack(ListNode(1, ListNode(2, ListNode(3, ListNode(2, ListNode(1)))))) == True
+def test_is_palindrome_stack_even_elements_non_palindrome(create_linked_list):
+    head = create_linked_list([1, 2, 3, 4])
+    assert is_palindrome_stack(head) == False
 
-def test_is_palindrome_stack_long_non_palindrome():
-    assert is_palindrome_stack(ListNode(1, ListNode(2, ListNode(3, ListNode(4, ListNode(5)))))) == False
+def test_is_palindrome_stack_complex_palindrome(create_linked_list):
+    head = create_linked_list([1, 2, 3, 2, 1])
+    assert is_palindrome_stack(head) == True
+
+def test_is_palindrome_stack_complex_non_palindrome(create_linked_list):
+    head = create_linked_list([1, 2, 3, 4, 5])
+    assert is_palindrome_stack(head) == False

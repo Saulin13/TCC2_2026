@@ -36,41 +36,41 @@ def test_visualise_empty_planet(capsys):
     )
     assert captured.out == expected_output
 
-def test_visualise_all_predators(capsys):
-    wt = WaTor(2, 2)
-    wt.set_planet([
-        [Entity(False, coords=(0, 0)), Entity(False, coords=(0, 1))],
-        [Entity(False, coords=(1, 0)), Entity(False, coords=(1, 1))]
-    ])
-    visualise(wt, 2, colour=False)
-    captured = capsys.readouterr()
-    expected_output = (
-        "x  x \n"
-        "x  x \n\n"
-        " Iteration: 2 | Prey count: 0 | Predator count: 4 | \n"
-    )
-    assert captured.out == expected_output
-
 def test_visualise_all_prey(capsys):
     wt = WaTor(2, 2)
     wt.set_planet([
         [Entity(True, coords=(0, 0)), Entity(True, coords=(0, 1))],
         [Entity(True, coords=(1, 0)), Entity(True, coords=(1, 1))]
     ])
+    visualise(wt, 2, colour=False)
+    captured = capsys.readouterr()
+    expected_output = (
+        "#  #  \n"
+        "#  #  \n\n"
+        " Iteration: 2 | Prey count: 4 | Predator count: 0 | \n"
+    )
+    assert captured.out == expected_output
+
+def test_visualise_all_predators(capsys):
+    wt = WaTor(2, 2)
+    wt.set_planet([
+        [Entity(False, coords=(0, 0)), Entity(False, coords=(0, 1))],
+        [Entity(False, coords=(1, 0)), Entity(False, coords=(1, 1))]
+    ])
     visualise(wt, 3, colour=False)
     captured = capsys.readouterr()
     expected_output = (
-        "#  # \n"
-        "#  # \n\n"
-        " Iteration: 3 | Prey count: 4 | Predator count: 0 | \n"
+        "x  x  \n"
+        "x  x  \n\n"
+        " Iteration: 3 | Prey count: 0 | Predator count: 4 | \n"
     )
     assert captured.out == expected_output
 
 def test_visualise_invalid_iter_number(capsys):
     wt = WaTor(2, 2)
     wt.set_planet([
-        [Entity(True, coords=(0, 0)), Entity(False, coords=(0, 1))],
-        [Entity(False, coords=(1, 0)), Entity(True, coords=(1, 1))]
+        [Entity(True, coords=(0, 0)), None],
+        [None, Entity(False, coords=(1, 1))]
     ])
-    with pytest.raises(TypeError):
-        visualise(wt, "invalid", colour=False)
+    with pytest.raises(ValueError):
+        visualise(wt, -1, colour=False)

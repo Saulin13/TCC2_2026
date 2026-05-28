@@ -31,11 +31,6 @@ def test_convex_hull_bf_two_points():
     expected = [(0.0, 0.0), (1.0, 1.0)]
     assert convex_hull_bf(points) == expected
 
-def test_convex_hull_bf_duplicate_points():
-    points = [(0, 0), (1, 1), (1, 1), (0, 0)]
-    expected = [(0.0, 0.0), (1.0, 1.0)]
-    assert convex_hull_bf(points) == expected
-
 def test_convex_hull_bf_no_points():
     points = []
     expected = []

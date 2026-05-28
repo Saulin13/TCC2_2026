@@ -12,11 +12,11 @@ def test_find_min_normal_cases():
 def test_find_min_edge_cases():
     assert find_min([]) == 0
     assert find_min([0, 0, 0, 0]) == 0
-    assert find_min([-1, 0, 1]) == 0
-    assert find_min([1, 2, 3, 4]) == 0
     assert find_min([-1, -5, 5, 1]) == 0
+    assert find_min([1, 2, 3, 4]) == 0
+    assert find_min([-1, 0, 1]) == 0
 
-def test_find_min_failure_cases():
+def test_find_min_exceptions():
     with pytest.raises(IndexError):
         find_min([-1])
     with pytest.raises(IndexError):

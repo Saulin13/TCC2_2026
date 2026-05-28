@@ -26,6 +26,6 @@ def test_graham_scan_minimum_points():
     expected = [(0, 0), (1, 1), (2, 2)]
     assert graham_scan(points) == expected
 
-def test_graham_scan_insufficient_points():
+def test_graham_scan_too_few_points():
     with pytest.raises(ValueError, match="graham_scan: argument must contain more than 3 points."):
         graham_scan([(0, 0), (1, 1)])

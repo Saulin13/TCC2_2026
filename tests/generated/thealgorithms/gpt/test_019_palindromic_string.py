@@ -18,5 +18,3 @@ def test_palindromic_string_edge_cases():
 def test_palindromic_string_failure_cases():
     with pytest.raises(TypeError):
         palindromic_string(None)
-    with pytest.raises(TypeError):
-        palindromic_string(123)

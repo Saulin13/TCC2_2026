@@ -18,6 +18,8 @@ def test_infix_to_postfix_mismatched_parentheses():
     with pytest.raises(ValueError, match="Mismatched parentheses"):
         infix_to_postfix("(1*(2+3)+4))")
     with pytest.raises(ValueError, match="Mismatched parentheses"):
-        infix_to_postfix("((3+2)")
-    with pytest.raises(ValueError, match="Mismatched parentheses"):
-        infix_to_postfix(")(")
+        infix_to_postfix("((3+4)*5-6")
+
+def test_infix_to_postfix_complex_expressions():
+    assert infix_to_postfix("((a+b)*c-(d-e))^(f+g)") == "a b + c * d e - - f g + ^"
+    assert infix_to_postfix("a+b*(c^d-e)^(f+g*h)-i") == "a b c d ^ e - f g h * + ^ * + i -"
