@@ -7,6 +7,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 RESULTS_DIR = BASE_DIR / "data" / "results"
 TESTS_GENERATED_DIR = BASE_DIR / "tests" / "generated"
+TESTS_LEGACY_DIR = TESTS_GENERATED_DIR / "legacy"
 
 COVERAGE_FILES = [
     BASE_DIR / ".coverage",
@@ -21,15 +22,29 @@ PYCACHE_TARGETS = [
 RECREATE_DIRS = [
     BASE_DIR / "data" / "results",
     BASE_DIR / "data" / "results" / "plots",
+    BASE_DIR / "data" / "results" / "plots" / "thealgorithms",
+    BASE_DIR / "data" / "results" / "plots" / "real",
     BASE_DIR / "data" / "results" / "generated_prompts",
-    BASE_DIR / "tests" / "generated",
+    BASE_DIR / "data" / "results" / "generated_prompts" / "thealgorithms" / "gpt",
+    BASE_DIR / "data" / "results" / "generated_prompts" / "thealgorithms" / "claude",
+    BASE_DIR / "data" / "results" / "generated_prompts" / "real" / "gpt",
+    BASE_DIR / "data" / "results" / "generated_prompts" / "real" / "claude",
+    BASE_DIR / "data" / "results" / "logs",
+    BASE_DIR / "tests" / "generated" / "thealgorithms" / "gpt",
+    BASE_DIR / "tests" / "generated" / "thealgorithms" / "claude",
+    BASE_DIR / "tests" / "generated" / "real" / "gpt",
+    BASE_DIR / "tests" / "generated" / "real" / "claude",
 ]
 
 
-def _collect_contents(path: Path) -> list[Path]:
+def _collect_contents(path: Path, *, exclude: frozenset[Path] | None = None) -> list[Path]:
     if not path.exists() or not path.is_dir():
         return []
-    return sorted(path.iterdir(), key=lambda p: p.as_posix())
+    excluded = exclude or frozenset()
+    return sorted(
+        (p for p in path.iterdir() if p.resolve() not in excluded),
+        key=lambda p: p.as_posix(),
+    )
 
 
 def _collect_pycache_dirs(root: Path) -> list[Path]:
@@ -61,7 +76,10 @@ def main() -> None:
     to_remove: list[Path] = []
 
     to_remove.extend(_collect_contents(RESULTS_DIR))
-    to_remove.extend(_collect_contents(TESTS_GENERATED_DIR))
+    legacy_exclude = frozenset({TESTS_LEGACY_DIR.resolve()})
+    to_remove.extend(
+        _collect_contents(TESTS_GENERATED_DIR, exclude=legacy_exclude)
+    )
     to_remove.extend([p for p in COVERAGE_FILES if p.exists()])
 
     for root in PYCACHE_TARGETS:

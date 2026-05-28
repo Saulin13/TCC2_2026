@@ -14,7 +14,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from dataset_config import DATASET_CHOICES, DATASET_REAL, DATASET_THEALGORITHMS
+from dataset_config import (
+    DATASET_CHOICES,
+    DATASET_REAL,
+    DATASET_THEALGORITHMS,
+    resolve_dataset,
+)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SCRIPTS_DIR = BASE_DIR / "scripts"
@@ -316,6 +321,37 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _print_final_summary(datasets: list[str]) -> None:
+    print("\n" + "=" * 72)
+    print("Pipeline finalizada com sucesso.")
+    print("\nArquivos principais gerados:")
+
+    for dataset in datasets:
+        cfg = resolve_dataset(dataset)
+        final_csv = cfg.result_csv("resultados_finais")
+        final_txt = cfg.result_txt("resumo_resultados_finais")
+        plots_dir = cfg.plots_dir
+        print(f"\n  [{dataset}]")
+        print(f"  - {final_csv.relative_to(BASE_DIR).as_posix()}")
+        print(f"  - {final_txt.relative_to(BASE_DIR).as_posix()}")
+        print(f"  - {plots_dir.relative_to(BASE_DIR).as_posix()}/")
+
+    print("\nLogs da execução:")
+    for dataset in datasets:
+        log_file = _log_path(dataset)
+        print(f"  - {log_file.relative_to(BASE_DIR).as_posix()}")
+
+    print("\nComandos úteis:")
+    print("  python scripts/00_run_pipeline.py --dataset thealgorithms")
+    print("  python scripts/00_run_pipeline.py --dataset real")
+    print("  python scripts/00_run_pipeline.py --dataset all")
+    print(
+        "  python scripts/00_run_pipeline.py --dataset all "
+        "--skip-generation --skip-evaluation"
+    )
+    print("=" * 72 + "\n")
+
+
 def main() -> int:
     args = parse_args()
 
@@ -338,6 +374,7 @@ def main() -> int:
         if not _run_pipeline_for_dataset(dataset, steps):
             return 1
 
+    _print_final_summary(datasets)
     return 0
 
 
