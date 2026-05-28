@@ -1,3 +1,4 @@
+import argparse
 import json
 import math
 import os
@@ -9,17 +10,21 @@ import pandas as pd
 from dotenv import load_dotenv
 from openai import OpenAI
 
-# Raiz do projeto; todos os caminhos são relativos a ela
-BASE_DIR = Path(__file__).resolve().parent.parent
+from csv_columns import prepare_csv_for_save
+from dataset_config import BASE_DIR, add_dataset_argument, resolve_dataset
+
 PROMPT_TEMPLATE_PATH = BASE_DIR / "prompts" / "prompt_evaluate_tests.txt"
-INPUT_COVERAGE = BASE_DIR / "data" / "results" / "coverage_results.csv"
-SAMPLE_FILE = BASE_DIR / "data" / "selected_functions" / "pilot_sample_30.csv"
-OUTPUT_EVAL = BASE_DIR / "data" / "results" / "evaluation_results_gpt.csv"
 
 MODEL_NAME = "gpt-4o"  # padrão; sobrescrito por OPENAI_MODEL no .env
 EXEC_LOG_MAX_CHARS = 4000
-RANDOM_SEED = 42
-SAMPLE_BY_LEVEL = {"baixa": 4, "media": 3, "alta": 3}
+EVAL_SAMPLE_PER_LEVEL = 10
+RANDOM_STATE = 42
+SAMPLE_BY_LEVEL = {
+    "baixa": EVAL_SAMPLE_PER_LEVEL,
+    "media": EVAL_SAMPLE_PER_LEVEL,
+    "alta": EVAL_SAMPLE_PER_LEVEL,
+}
+COMPLEXITY_ORDER = ("baixa", "media", "alta")
 MERGE_KEYS = ("function_name", "file_path")
 
 
@@ -48,8 +53,17 @@ def normalize_complexity_level(value: object) -> str:
     return norm
 
 
+def format_balanced_summary(df: pd.DataFrame, n: int) -> str:
+    expected = sum(SAMPLE_BY_LEVEL.values())
+    work = df.copy()
+    work["complexity_level"] = work["complexity_level"].apply(normalize_complexity_level)
+    counts = work["complexity_level"].value_counts()
+    parts = [f"{level}={int(counts.get(level, 0))}" for level in COMPLEXITY_ORDER]
+    return f"Amostra balanceada: {n} de {expected} ({', '.join(parts)})"
+
+
 def select_balanced_sample(df: pd.DataFrame) -> pd.DataFrame:
-    """Seleciona amostra balanceada: 4 baixa, 3 média, 3 alta."""
+    """Seleciona amostra balanceada: 10 baixa, 10 média, 10 alta (total 30)."""
     work = df.copy()
     work["complexity_level"] = work["complexity_level"].apply(normalize_complexity_level)
     parts: list[pd.DataFrame] = []
@@ -61,7 +75,7 @@ def select_balanced_sample(df: pd.DataFrame) -> pd.DataFrame:
         k = min(target, available)
         if k == 0:
             continue
-        parts.append(pool.sample(n=k, random_state=RANDOM_SEED))
+        parts.append(pool.sample(n=k, random_state=RANDOM_STATE))
     if not parts:
         return work.iloc[0:0]
     return pd.concat(parts, ignore_index=True)
@@ -219,7 +233,7 @@ def evaluate_one(
 
     source_code = row.get("source_code")
     if not isinstance(source_code, str) or not source_code.strip():
-        source_code = "(código-fonte não encontrado no pilot_sample_30.csv)"
+        source_code = "(código-fonte não encontrado na amostra selecionada)"
 
     if test_path.is_file():
         test_code = test_path.read_text(encoding="utf-8")
@@ -239,31 +253,53 @@ def evaluate_one(
     return _row_from_evaluation(row, scores, parse_err)
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Avalia testes gerados com GPT usando LLM."
+    )
+    parser.add_argument(
+        "--pilot",
+        action="store_true",
+        help="Usa amostra piloto do dataset (apenas thealgorithms).",
+    )
+    add_dataset_argument(parser)
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+    cfg = resolve_dataset(args.dataset)
+    sample_file = cfg.resolve_sample(pilot=args.pilot)
+    input_coverage = cfg.result_csv("cobertura_testes_gerados_gpt")
+    output_eval = cfg.result_csv("avaliacao_gpt_sobre_testes_gpt")
+
     load_dotenv(BASE_DIR / ".env")
 
-    if not INPUT_COVERAGE.exists():
-        print(f"Erro: arquivo não encontrado: {INPUT_COVERAGE}")
+    print(f"Dataset: {cfg.key}")
+    print(f"Amostra usada: {sample_file}")
+
+    if not input_coverage.exists():
+        print(f"Erro: arquivo não encontrado: {input_coverage}")
         return
     if not PROMPT_TEMPLATE_PATH.exists():
         print(f"Erro: template não encontrado: {PROMPT_TEMPLATE_PATH}")
         return
-    if not SAMPLE_FILE.exists():
-        print(f"Erro: arquivo não encontrado: {SAMPLE_FILE}")
+    if not sample_file.exists():
+        print(f"Erro: arquivo não encontrado: {sample_file}")
         return
 
     template = PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
     client = OpenAI()
     model = resolve_model_name()
 
-    df_cov = pd.read_csv(INPUT_COVERAGE)
+    df_cov = pd.read_csv(input_coverage)
     df_selected = select_balanced_sample(df_cov)
     n = len(df_selected)
     if n == 0:
-        print("Nenhuma linha elegível em coverage_results.csv para avaliar.")
+        print("Nenhuma linha elegível em cobertura_testes_gerados_gpt.csv para avaliar.")
         return
 
-    df_sample = pd.read_csv(SAMPLE_FILE)
+    df_sample = pd.read_csv(sample_file)
     df_eval = df_selected.merge(
         df_sample[list(MERGE_KEYS) + ["source_code"]],
         on=list(MERGE_KEYS),
@@ -271,13 +307,9 @@ def main():
     )
     missing_source = df_eval["source_code"].isna().sum()
     if missing_source:
-        print(f"Aviso: {missing_source} função(ões) sem source_code no pilot_sample_30.csv.")
+        print(f"Aviso: {missing_source} função(ões) sem source_code em {sample_file.name}.")
 
-    expected = sum(SAMPLE_BY_LEVEL.values())
-    print(
-        f"Amostra balanceada: {n} de {expected} "
-        f"({', '.join(f'{level}={count}' for level, count in df_eval['complexity_level'].value_counts().items())})"
-    )
+    print(format_balanced_summary(df_eval, n))
     print(f"Modelo OpenAI: {model}")
     print(f"Iniciando avaliação LLM de {n} entradas...")
 
@@ -294,9 +326,9 @@ def main():
             row_out = _row_from_evaluation(row, {}, f"Erro na API: {e}")
         rows.append(row_out)
 
-    out_df = pd.DataFrame(rows)[OUTPUT_COLUMNS]
-    out_df.to_csv(OUTPUT_EVAL, index=False, encoding="utf-8")
-    print(f"Avaliação concluída. Resultados: {OUTPUT_EVAL}")
+    out_df = prepare_csv_for_save(pd.DataFrame(rows)[OUTPUT_COLUMNS])
+    out_df.to_csv(output_eval, index=False, encoding="utf-8")
+    print(f"Avaliação concluída. Resultados: {output_eval}")
 
 
 if __name__ == "__main__":

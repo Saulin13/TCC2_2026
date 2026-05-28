@@ -1,27 +1,23 @@
 """
-Consolida métricas do experimento piloto em final_results.csv e final_summary.txt.
+Consolida métricas do experimento piloto em resultados_finais.csv e resumo_resultados_finais.txt.
 Não usa mutation_score.
 """
 
 from __future__ import annotations
 
+import argparse
 import unicodedata
 from pathlib import Path
 
 import pandas as pd
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-RESULTS_DIR = BASE_DIR / "data" / "results"
-
-INPUT_COVERAGE = RESULTS_DIR / "coverage_results.csv"
-INPUT_DENSITY = RESULTS_DIR / "metric_assertion_density.csv"
-INPUT_SUCCESS = RESULTS_DIR / "metric_execution_success.csv"
-INPUT_STRENGTH = RESULTS_DIR / "test_strength_results.csv"
-INPUT_EVAL_GPT = RESULTS_DIR / "evaluation_results_gpt.csv"
-INPUT_EVAL_CLAUDE = RESULTS_DIR / "evaluation_results_claude.csv"
-
-OUTPUT_FINAL = RESULTS_DIR / "final_results.csv"
-OUTPUT_SUMMARY = RESULTS_DIR / "final_summary.txt"
+from csv_columns import (
+    log_dataframe_info,
+    standardize_function_column,
+    standardize_test_file_column,
+    validate_required_columns,
+)
+from dataset_config import DatasetConfig, add_dataset_argument, resolve_dataset
 
 MERGE_KEYS = ("function_name", "test_file")
 FINAL_COLUMNS = [
@@ -38,6 +34,7 @@ FINAL_COLUMNS = [
 ]
 
 COMPLEXITY_ORDER = ("baixa", "media", "alta")
+MERGE_COUNT = 0
 
 
 def _normalize_text(value: str) -> str:
@@ -78,21 +75,44 @@ def _category_to_success_rate(category: object) -> float | None:
     return 0.0
 
 
-def _load_required(path: Path, label: str) -> pd.DataFrame | None:
+def _load_and_standardize(path: Path, label: str, *, required: bool = True) -> pd.DataFrame | None:
     if not path.exists():
-        print(f"Erro: {label} não encontrado: {path}")
+        if required:
+            print(f"Erro: {label} não encontrado: {path}")
+        else:
+            print(f"Aviso: opcional ausente — {path.name}")
         return None
-    return pd.read_csv(path)
+
+    df = standardize_test_file_column(standardize_function_column(pd.read_csv(path)))
+    log_dataframe_info(label, df, source=path.name)
+    return df
 
 
-def _load_optional(path: Path) -> pd.DataFrame | None:
-    if path.exists():
-        return pd.read_csv(path)
-    print(f"Aviso: opcional ausente — {path.name}")
-    return None
+def _merge_logged(
+    left: pd.DataFrame,
+    right: pd.DataFrame,
+    *,
+    on: str | list[str],
+    how: str,
+    label: str,
+) -> pd.DataFrame:
+    global MERGE_COUNT
+    before = len(left)
+    merged = left.merge(right, on=on, how=how)
+    MERGE_COUNT += 1
+    print(
+        f"[MERGE {MERGE_COUNT}] {label} | on={on} | how={how} | "
+        f"linhas antes={before} | depois={len(merged)}"
+    )
+    return merged
 
 
-def _prepare_coverage(df: pd.DataFrame) -> pd.DataFrame:
+def _prepare_coverage(df: pd.DataFrame, source_name: str) -> pd.DataFrame:
+    validate_required_columns(
+        df,
+        ["function_name", "test_file", "complexity_level", "execution_status", "coverage_percent", "passed"],
+        source_name,
+    )
     out = df.copy()
     out["complexity_level"] = out["complexity_level"].apply(normalize_complexity_level)
     out["coverage_percent"] = pd.to_numeric(out["coverage_percent"], errors="coerce")
@@ -102,66 +122,124 @@ def _prepare_coverage(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _prepare_density(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
-    out["test_file_key"] = out["file_name"].astype(str).map(lambda x: Path(x).name)
+def _prepare_density(df: pd.DataFrame, source_name: str) -> pd.DataFrame:
+    validate_required_columns(df, ["assertion_density"], source_name)
+    out = standardize_test_file_column(df.copy())
+    if "test_file" not in out.columns and "file_name" in out.columns:
+        out = out.rename(columns={"file_name": "test_file"})
+    validate_required_columns(out, ["test_file"], source_name)
+    out["test_file_key"] = out["test_file"].astype(str).map(_test_file_basename)
     out["assertion_density"] = pd.to_numeric(out["assertion_density"], errors="coerce")
     return out[["test_file_key", "assertion_density"]].drop_duplicates(subset=["test_file_key"])
 
 
-def _prepare_success(df: pd.DataFrame) -> pd.DataFrame:
-    out = df.copy()
+def _prepare_success(df: pd.DataFrame, source_name: str) -> pd.DataFrame:
+    out = standardize_function_column(df.copy())
+    validate_required_columns(out, ["function_name"], source_name)
     if "execution_category" not in out.columns:
+        print(f"Aviso: {source_name} sem execution_category; execution_success_rate ficará vazio.")
         return pd.DataFrame(columns=["function_name", "execution_success_rate"])
     out["execution_success_rate"] = out["execution_category"].map(_category_to_success_rate)
     return out[["function_name", "execution_success_rate"]].drop_duplicates(subset=["function_name"])
 
 
-def _prepare_strength(df: pd.DataFrame) -> pd.DataFrame:
+def _prepare_strength(df: pd.DataFrame, source_name: str) -> pd.DataFrame:
+    validate_required_columns(
+        df,
+        ["function_name", "test_strength_score"],
+        source_name,
+    )
     out = df.copy()
-    out["complexity_level"] = out["complexity_level"].apply(normalize_complexity_level)
+    if "complexity_level" in out.columns:
+        out["complexity_level"] = out["complexity_level"].apply(normalize_complexity_level)
     out["test_strength_score"] = pd.to_numeric(out["test_strength_score"], errors="coerce")
     return out[["function_name", "test_strength_score"]].drop_duplicates(subset=["function_name"])
 
 
-def _prepare_eval(df: pd.DataFrame, score_column: str) -> pd.DataFrame:
+def _prepare_eval(df: pd.DataFrame, score_column: str, source_name: str) -> pd.DataFrame:
+    validate_required_columns(df, list(MERGE_KEYS) + ["overall_score"], source_name)
     out = df.copy()
     out["test_file"] = out["test_file"].astype(str)
     out[score_column] = pd.to_numeric(out["overall_score"], errors="coerce")
     return out[list(MERGE_KEYS) + [score_column]].drop_duplicates(subset=list(MERGE_KEYS))
 
 
-def consolidate() -> pd.DataFrame | None:
-    df_cov = _load_required(INPUT_COVERAGE, "coverage_results.csv")
-    df_density = _load_required(INPUT_DENSITY, "metric_assertion_density.csv")
-    df_success = _load_required(INPUT_SUCCESS, "metric_execution_success.csv")
-    df_strength = _load_required(INPUT_STRENGTH, "test_strength_results.csv")
+def consolidate(cfg: DatasetConfig) -> pd.DataFrame | None:
+    global MERGE_COUNT
+    MERGE_COUNT = 0
+
+    input_coverage = cfg.result_csv("cobertura_testes_gerados_gpt")
+    input_density = cfg.result_csv("metrica_densidade_asserts")
+    input_success = cfg.result_csv("metrica_sucesso_execucao")
+    input_strength = cfg.result_csv("forca_heuristica_testes")
+    input_eval_gpt = cfg.result_csv("avaliacao_gpt_sobre_testes_gpt")
+    input_eval_claude = cfg.result_csv("avaliacao_claude_sobre_testes_gpt")
+
+    print("Carregando CSVs para consolidação...\n")
+
+    df_cov = _load_and_standardize(input_coverage, "df_cov")
+    df_density = _load_and_standardize(input_density, "df_density")
+    df_success = _load_and_standardize(input_success, "df_success")
+    df_strength = _load_and_standardize(input_strength, "df_strength")
 
     if any(x is None for x in (df_cov, df_density, df_success, df_strength)):
         return None
 
-    base = _prepare_coverage(df_cov)
-    final = base[list(MERGE_KEYS) + ["complexity_level", "execution_status", "coverage_percent", "test_file_key", "passed_bool"]].copy()
+    base = _prepare_coverage(df_cov, input_coverage.name)
+    final = base[
+        list(MERGE_KEYS)
+        + ["complexity_level", "execution_status", "coverage_percent", "test_file_key", "passed_bool"]
+    ].copy()
 
-    final = final.merge(_prepare_density(df_density), on="test_file_key", how="left")
+    final = _merge_logged(
+        final,
+        _prepare_density(df_density, input_density.name),
+        on="test_file_key",
+        how="left",
+        label="densidade de asserts",
+    )
 
-    final = final.merge(_prepare_success(df_success), on="function_name", how="left")
+    final = _merge_logged(
+        final,
+        _prepare_success(df_success, input_success.name),
+        on="function_name",
+        how="left",
+        label="sucesso de execução",
+    )
     final["execution_success_rate"] = final["execution_success_rate"].where(
         final["execution_success_rate"].notna(),
         final["passed_bool"].astype(float),
     )
 
-    final = final.merge(_prepare_strength(df_strength), on="function_name", how="left")
+    final = _merge_logged(
+        final,
+        _prepare_strength(df_strength, input_strength.name),
+        on="function_name",
+        how="left",
+        label="test_strength_score",
+    )
 
-    df_gpt = _load_optional(INPUT_EVAL_GPT)
+    df_gpt = _load_and_standardize(input_eval_gpt, "df_gpt", required=False)
     if df_gpt is not None:
-        final = final.merge(_prepare_eval(df_gpt, "overall_score_gpt"), on=list(MERGE_KEYS), how="left")
+        final = _merge_logged(
+            final,
+            _prepare_eval(df_gpt, "overall_score_gpt", input_eval_gpt.name),
+            on=list(MERGE_KEYS),
+            how="left",
+            label="avaliação GPT",
+        )
     else:
         final["overall_score_gpt"] = pd.NA
 
-    df_claude = _load_optional(INPUT_EVAL_CLAUDE)
+    df_claude = _load_and_standardize(input_eval_claude, "df_claude", required=False)
     if df_claude is not None:
-        final = final.merge(_prepare_eval(df_claude, "overall_score_claude"), on=list(MERGE_KEYS), how="left")
+        final = _merge_logged(
+            final,
+            _prepare_eval(df_claude, "overall_score_claude", input_eval_claude.name),
+            on=list(MERGE_KEYS),
+            how="left",
+            label="avaliação Claude",
+        )
     else:
         final["overall_score_claude"] = pd.NA
 
@@ -169,6 +247,7 @@ def consolidate() -> pd.DataFrame | None:
         if col not in final.columns:
             final[col] = pd.NA
 
+    print(f"\nTotal de merges realizados: {MERGE_COUNT}\n")
     return final[FINAL_COLUMNS]
 
 
@@ -185,9 +264,9 @@ def _format_distribution(series: pd.Series, title: str) -> list[str]:
     return lines
 
 
-def write_summary(df: pd.DataFrame) -> None:
+def write_summary(df: pd.DataFrame, output_summary: Path, *, dataset_label: str) -> None:
     lines: list[str] = [
-        "Resumo consolidado do experimento piloto",
+        f"Resumo consolidado do experimento ({dataset_label})",
         "=" * 50,
         f"Total de testes: {len(df)}",
         "",
@@ -251,28 +330,55 @@ def write_summary(df: pd.DataFrame) -> None:
         if not sub.empty:
             lines.append(f"  {level}: {sub.mean():.2f} (n={len(sub)})")
 
-    OUTPUT_SUMMARY.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    output_summary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Consolida métricas do experimento.")
+    add_dataset_argument(parser)
+    return parser.parse_args()
 
 
 def main() -> None:
-    print("Consolidando resultados finais do experimento...")
+    args = parse_args()
+    cfg = resolve_dataset(args.dataset)
+    output_final = cfg.result_csv("resultados_finais")
+    output_summary = cfg.result_txt("resumo_resultados_finais")
 
-    final = consolidate()
+    print(f"Dataset: {cfg.key}")
+    print("Consolidando resultados finais do experimento...\n")
+
+    try:
+        final = consolidate(cfg)
+    except ValueError as exc:
+        print(exc)
+        print("Consolidação abortada.")
+        return
+
     if final is None or final.empty:
         print("Consolidação abortada: dados insuficientes.")
         return
 
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    final.to_csv(OUTPUT_FINAL, index=False, encoding="utf-8")
-    write_summary(final)
+    cfg.results_dir.mkdir(parents=True, exist_ok=True)
+    final.to_csv(output_final, index=False, encoding="utf-8")
+    write_summary(final, output_summary, dataset_label=cfg.key)
 
-    print(f"\nArquivo consolidado: {OUTPUT_FINAL}")
-    print(f"Resumo textual: {OUTPUT_SUMMARY}")
+    print(f"\nArquivo consolidado: {output_final}")
+    print(f"Resumo textual: {output_summary}")
     print(f"Linhas consolidadas: {len(final)}")
     print("\nColunas:")
     for col in final.columns:
         non_null = final[col].notna().sum()
         print(f"  - {col}: {non_null}/{len(final)} preenchidos")
+
+    unexpected_na = []
+    for col in ("function_name", "test_file", "coverage_percent"):
+        if final[col].isna().any():
+            unexpected_na.append(f"{col} ({int(final[col].isna().sum())} NaN)")
+    if unexpected_na:
+        print("\nAviso: colunas essenciais com NaN:", ", ".join(unexpected_na))
+    else:
+        print("\nColunas essenciais (function_name, test_file, coverage_percent) sem NaN indevido.")
 
 
 if __name__ == "__main__":

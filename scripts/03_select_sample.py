@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import random
 import unicodedata
 from pathlib import Path
@@ -8,10 +9,12 @@ import pandas as pd
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_CSV_PATH = BASE_DIR / "data" / "raw" / "functions_with_complexity.csv"
-OUTPUT_CSV_PATH = BASE_DIR / "data" / "selected_functions" / "pilot_sample_30.csv"
+OUTPUT_MAIN_CSV_PATH = BASE_DIR / "data" / "selected_functions" / "sample_thealgorithms_60.csv"
+OUTPUT_PILOT_CSV_PATH = BASE_DIR / "data" / "selected_functions" / "pilot_sample_30.csv"
 
-TARGET_PER_LEVEL = 10
-RANDOM_SEED = 42
+SAMPLE_SIZE_PER_LEVEL = 20
+PILOT_SAMPLE_SIZE_PER_LEVEL = 10
+RANDOM_STATE = 42
 
 EXCLUDED_PATH_SEGMENTS = frozenset(
     {"computer_vision", "digital_image_processing", "project_euler"}
@@ -166,7 +169,7 @@ def select_with_file_diversity(df_level: pd.DataFrame, target_n: int) -> pd.Data
     if df_level.empty:
         return df_level.copy()
 
-    rng = random.Random(RANDOM_SEED)
+    rng = random.Random(RANDOM_STATE)
 
     file_to_indices: dict[str, list[int]] = {}
     for file_path, group in df_level.groupby("file_path"):
@@ -195,7 +198,40 @@ def select_with_file_diversity(df_level: pd.DataFrame, target_n: int) -> pd.Data
     return df_level.loc[selected_indices].copy()
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Seleciona amostra estratificada por complexidade no TheAlgorithms/Python."
+    )
+    parser.add_argument(
+        "--sample-size-per-level",
+        type=int,
+        default=SAMPLE_SIZE_PER_LEVEL,
+        help=f"Quantidade de funcoes por nivel (padrao: {SAMPLE_SIZE_PER_LEVEL}).",
+    )
+    parser.add_argument(
+        "--pilot",
+        action="store_true",
+        help=(
+            "Gera arquivo piloto pilot_sample_30.csv com tamanho por nivel "
+            f"{PILOT_SAMPLE_SIZE_PER_LEVEL}."
+        ),
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
+
+    target_per_level = args.sample_size_per_level
+    output_csv_path = OUTPUT_MAIN_CSV_PATH
+
+    if args.pilot:
+        target_per_level = PILOT_SAMPLE_SIZE_PER_LEVEL
+        output_csv_path = OUTPUT_PILOT_CSV_PATH
+
+    if target_per_level <= 0:
+        raise ValueError("--sample-size-per-level deve ser maior que zero.")
+
     if not INPUT_CSV_PATH.exists():
         raise FileNotFoundError(f"Arquivo de entrada nao encontrado: {INPUT_CSV_PATH}")
 
@@ -236,13 +272,13 @@ def main() -> None:
     selected_parts: list[pd.DataFrame] = []
     for level in ("baixa", "media", "alta"):
         level_candidates = filtered[filtered["complexity_level"] == level].copy()
-        level_selected = select_with_file_diversity(level_candidates, TARGET_PER_LEVEL)
+        level_selected = select_with_file_diversity(level_candidates, target_per_level)
         selected_parts.append(level_selected)
 
-        if len(level_selected) < TARGET_PER_LEVEL:
+        if len(level_selected) < target_per_level:
             print(
                 f"Aviso: nivel '{level}' possui apenas {len(level_selected)} "
-                f"funcoes elegiveis (alvo: {TARGET_PER_LEVEL})."
+                f"funcoes elegiveis (alvo: {target_per_level})."
             )
 
     selected = pd.concat(selected_parts, ignore_index=True)
@@ -250,13 +286,13 @@ def main() -> None:
         by=["complexity_level", "file_path", "function_name"]
     ).reset_index(drop=True)
 
-    OUTPUT_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
-    selected.to_csv(OUTPUT_CSV_PATH, index=False, encoding="utf-8")
+    output_csv_path.parent.mkdir(parents=True, exist_ok=True)
+    selected.to_csv(output_csv_path, index=False, encoding="utf-8")
 
     print(f"Total selecionado: {len(selected)}")
     print("Distribuicao por nivel:")
     print(selected["complexity_level"].value_counts().to_string())
-    print(f"Arquivo salvo em: {OUTPUT_CSV_PATH.relative_to(BASE_DIR).as_posix()}")
+    print(f"Arquivo salvo em: {output_csv_path.relative_to(BASE_DIR).as_posix()}")
 
 
 if __name__ == "__main__":

@@ -5,18 +5,16 @@ Usa test_strength_score como métrica heurística complementar (não mutation te
 
 from __future__ import annotations
 
+import argparse
 import unicodedata
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-INPUT_COVERAGE = BASE_DIR / "data" / "results" / "coverage_results.csv"
-INPUT_EVAL = BASE_DIR / "data" / "results" / "evaluation_results.csv"
-INPUT_STRENGTH = BASE_DIR / "data" / "results" / "test_strength_results.csv"
-OUTPUT_DIR = BASE_DIR / "data" / "results" / "plots"
+from dataset_config import add_dataset_argument, resolve_dataset
+
+OUTPUT_DIR = Path(".")
 
 COMPLEXITY_ORDER = ("baixa", "media", "alta")
 STATUS_ORDER = ("ok", "tests_failed", "pytest_error", "timeout")
@@ -83,14 +81,12 @@ def plot_01_execucao_por_status(df_cov: pd.DataFrame) -> None:
 
     fig, ax = plt.subplots(figsize=(8, 5))
     bars = ax.bar(order, values, color=colors, edgecolor="#333333", linewidth=0.6)
-    ax.set_title("Quantidade de testes por status de execução (piloto)")
     ax.set_xlabel("execution_status")
     ax.set_ylabel("Quantidade de testes")
     ax.tick_params(axis="x", rotation=25)
-    total = sum(values) or 1
     for bar, val in zip(bars, values):
         ax.annotate(
-            f"{val}\n({val / total * 100:.1f}%)",
+            f"{val}",
             xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
             ha="center",
             va="bottom",
@@ -113,7 +109,6 @@ def plot_02_cobertura_media_por_complexidade(df_cov: pd.DataFrame) -> None:
 
     fig, ax = plt.subplots(figsize=(7, 5))
     bars = ax.bar(labels, values, color=["#3498db", "#9b59b6", "#e67e22"][: len(labels)])
-    ax.set_title("Cobertura média por nível de complexidade")
     ax.set_xlabel("complexity_level")
     ax.set_ylabel("coverage_percent (média, %)")
     ax.set_ylim(0, 100)
@@ -126,7 +121,6 @@ def plot_02_cobertura_media_por_complexidade(df_cov: pd.DataFrame) -> None:
 def _boxplot_by_complexity(
     df: pd.DataFrame,
     value_col: str,
-    title: str,
     ylabel: str,
     filename: str,
 ) -> None:
@@ -147,7 +141,6 @@ def _boxplot_by_complexity(
     for patch, color in zip(bp["boxes"], colors[: len(bp["boxes"])]):
         patch.set_facecolor(color)
         patch.set_alpha(0.65)
-    ax.set_title(title)
     ax.set_xlabel("complexity_level")
     ax.set_ylabel(ylabel)
     fig.tight_layout()
@@ -161,7 +154,6 @@ def plot_03_nota_llm_por_complexidade(df_eval: pd.DataFrame) -> None:
     _boxplot_by_complexity(
         df,
         "overall_score",
-        "Nota geral da LLM (overall_score) por complexidade",
         "overall_score",
         "03_nota_llm_por_complexidade.png",
     )
@@ -171,7 +163,6 @@ def _scatter_with_trend(
     x: pd.Series,
     y: pd.Series,
     *,
-    title: str,
     xlabel: str,
     ylabel: str,
     filename: str,
@@ -190,15 +181,6 @@ def _scatter_with_trend(
         ax.scatter(valid["x"], valid["y"], c=colors, alpha=0.85, s=70, edgecolors="white", linewidths=0.5)
     else:
         ax.scatter(valid["x"], valid["y"], alpha=0.85, s=70, c="#2980b9", edgecolors="white", linewidths=0.5)
-
-    if len(valid) >= 2:
-        coef = np.polyfit(valid["x"], valid["y"], 1)
-        poly = np.poly1d(coef)
-        x_line = np.linspace(valid["x"].min(), valid["x"].max(), 50)
-        ax.plot(x_line, poly(x_line), "--", color="#c0392b", linewidth=1.5, label="Tendência (regressão linear)")
-        ax.legend(loc="best", fontsize=9)
-
-    ax.set_title(title)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     fig.tight_layout()
@@ -212,7 +194,6 @@ def plot_04_cobertura_vs_nota_llm(df_eval: pd.DataFrame) -> None:
     _scatter_with_trend(
         df["coverage_percent"],
         df["overall_score"],
-        title="Cobertura vs. qualidade avaliada pela LLM",
         xlabel="coverage_percent (%)",
         ylabel="overall_score (LLM)",
         filename="04_cobertura_vs_nota_llm.png",
@@ -227,7 +208,6 @@ def plot_05_test_strength_por_complexidade(df_str: pd.DataFrame) -> None:
     _boxplot_by_complexity(
         df,
         "test_strength_score",
-        "test_strength_score (heurístico) por complexidade",
         "test_strength_score (0–10)",
         "05_test_strength_por_complexidade.png",
     )
@@ -240,7 +220,6 @@ def plot_06_test_strength_vs_coverage(df_str: pd.DataFrame) -> None:
     _scatter_with_trend(
         df["coverage_percent"],
         df["test_strength_score"],
-        title="Cobertura vs. test_strength_score (métrica heurística)",
         xlabel="coverage_percent (%)",
         ylabel="test_strength_score",
         filename="06_test_strength_vs_coverage.png",
@@ -279,7 +258,6 @@ def plot_07_test_strength_vs_llm_score(
     _scatter_with_trend(
         merged["test_strength_score"],
         merged["overall_score"],
-        title="test_strength_score (heurístico) vs. overall_score (LLM)",
         xlabel="test_strength_score",
         ylabel="overall_score (LLM)",
         filename="07_test_strength_vs_llm_score.png",
@@ -362,40 +340,54 @@ def build_summary_metrics(
     return pd.DataFrame(rows)
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Gera gráficos finais do experimento.")
+    add_dataset_argument(parser)
+    return parser.parse_args()
+
+
 def main() -> None:
-    print("Gerando gráficos finais do piloto...")
+    global OUTPUT_DIR
+
+    args = parse_args()
+    cfg = resolve_dataset(args.dataset)
+    input_coverage = cfg.result_csv("cobertura_testes_gerados_gpt")
+    input_eval = cfg.result_csv("avaliacao_gpt_sobre_testes_gpt")
+    input_strength = cfg.result_csv("forca_heuristica_testes")
+    OUTPUT_DIR = cfg.plots_dir
+
+    print(f"Dataset: {cfg.key}")
+    print("Gerando gráficos finais...")
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     plt.rcParams.update(
         {
             "font.size": 11,
             "axes.labelsize": 12,
-            "axes.titlesize": 13,
-            "figure.titlesize": 14,
         }
     )
 
-    if not INPUT_COVERAGE.exists():
-        print(f"Erro: arquivo obrigatório não encontrado: {INPUT_COVERAGE}")
+    if not input_coverage.exists():
+        print(f"Erro: arquivo obrigatório não encontrado: {input_coverage}")
         return
 
-    df_cov = _prepare_coverage(pd.read_csv(INPUT_COVERAGE))
+    df_cov = _prepare_coverage(pd.read_csv(input_coverage))
 
     df_eval: pd.DataFrame | None = None
-    if INPUT_EVAL.exists():
-        df_eval = pd.read_csv(INPUT_EVAL)
+    if input_eval.exists():
+        df_eval = pd.read_csv(input_eval)
         df_eval["complexity_level"] = df_eval["complexity_level"].apply(normalize_complexity_level)
         print(f"Avaliação LLM carregada: {len(df_eval)} registros.")
     else:
-        print(f"Aviso: {INPUT_EVAL.name} não encontrado — gráficos 03, 04 e 07 serão omitidos.")
+        print(f"Aviso: {input_eval.name} não encontrado — gráficos 03, 04 e 07 serão omitidos.")
 
     df_str: pd.DataFrame | None = None
-    if INPUT_STRENGTH.exists():
-        df_str = pd.read_csv(INPUT_STRENGTH)
+    if input_strength.exists():
+        df_str = pd.read_csv(input_strength)
         df_str["complexity_level"] = df_str["complexity_level"].apply(normalize_complexity_level)
         print(f"test_strength_results carregado: {len(df_str)} registros.")
     else:
-        print(f"Aviso: {INPUT_STRENGTH.name} não encontrado — gráficos 05, 06 e 07 serão omitidos.")
+        print(f"Aviso: {input_strength.name} não encontrado — gráficos 05, 06 e 07 serão omitidos.")
 
     print("\nGráficos:")
     plot_01_execucao_por_status(df_cov)

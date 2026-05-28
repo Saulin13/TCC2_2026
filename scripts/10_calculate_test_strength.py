@@ -10,12 +10,11 @@ import re
 import unicodedata
 from pathlib import Path
 
+import argparse
 import pandas as pd
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-INPUT_COVERAGE = BASE_DIR / "data" / "results" / "coverage_results.csv"
-TESTS_DIR = BASE_DIR / "tests" / "generated"
-OUTPUT_CSV = BASE_DIR / "data" / "results" / "test_strength_results.csv"
+from csv_columns import prepare_csv_for_save
+from dataset_config import BASE_DIR, add_dataset_argument, resolve_dataset
 
 OUTPUT_COLUMNS = [
     "function_name",
@@ -245,18 +244,40 @@ def _print_statistics(df: pd.DataFrame) -> None:
         )
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Calcula test_strength_score (métrica heurística complementar)."
+    )
+    parser.add_argument(
+        "--generator",
+        choices=("gpt", "claude"),
+        default="gpt",
+        help="Gerador dos testes e cobertura de entrada (padrão: gpt).",
+    )
+    add_dataset_argument(parser)
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
+    cfg = resolve_dataset(args.dataset)
+    generator = args.generator
+    input_coverage = cfg.result_csv(f"cobertura_testes_gerados_{generator}")
+    tests_dir = cfg.tests_dir(generator)
+    output_csv = cfg.result_csv("forca_heuristica_testes")
+
+    print(f"Dataset: {cfg.key} | Gerador: {generator}")
     print("Calculando test_strength_score (métrica heurística complementar)...")
     print("Nota: não é mutation testing nem mutation score.\n")
 
-    if not INPUT_COVERAGE.exists():
-        print(f"Erro: arquivo não encontrado: {INPUT_COVERAGE}")
+    if not input_coverage.exists():
+        print(f"Erro: arquivo não encontrado: {input_coverage}")
         return
-    if not TESTS_DIR.is_dir():
-        print(f"Erro: diretório não encontrado: {TESTS_DIR}")
+    if not tests_dir.is_dir():
+        print(f"Erro: diretório não encontrado: {tests_dir}")
         return
 
-    df_cov = pd.read_csv(INPUT_COVERAGE)
+    df_cov = pd.read_csv(input_coverage)
     rows: list[dict[str, object]] = []
 
     for _, cov_row in df_cov.iterrows():
@@ -296,11 +317,11 @@ def main() -> None:
         print("Nenhum registro processado.")
         return
 
-    out_df = pd.DataFrame(rows)[OUTPUT_COLUMNS]
-    OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
-    out_df.to_csv(OUTPUT_CSV, index=False, encoding="utf-8")
+    out_df = prepare_csv_for_save(pd.DataFrame(rows)[OUTPUT_COLUMNS])
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    out_df.to_csv(output_csv, index=False, encoding="utf-8")
 
-    print(f"Resultados salvos em: {OUTPUT_CSV}")
+    print(f"Resultados salvos em: {output_csv}")
     print(f"Total de testes analisados: {len(out_df)}")
     print(f"Média geral do test_strength_score: {out_df['test_strength_score'].mean():.2f}")
 

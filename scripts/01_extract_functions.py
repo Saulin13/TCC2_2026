@@ -5,11 +5,9 @@ from pathlib import Path
 
 import pandas as pd
 
-# Configure aqui o caminho base do repositorio a ser analisado.
-# Exemplo: BASE_REPO_PATH = Path("repos/Python")
-BASE_REPO_PATH = Path("repos/Python")
-
-OUTPUT_CSV_PATH = Path("data/raw/functions_extracpip install pandas radonpython scripts/02_measure_complexity.pyted.csv")
+BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_REPO_PATH = BASE_DIR / "repos" / "Python"
+OUTPUT_CSV_PATH = BASE_DIR / "data" / "raw" / "functions_extracted.csv"
 IGNORED_DIR_KEYWORDS = ("test", "tests")
 IGNORED_FILE_PREFIX = "test_"
 
@@ -83,9 +81,7 @@ def extract_functions(base_repo_path: Path) -> pd.DataFrame:
 
 def main() -> None:
     if not BASE_REPO_PATH.exists():
-        raise FileNotFoundError(
-            f"Caminho base nao encontrado: {BASE_REPO_PATH.resolve()}"
-        )
+        raise FileNotFoundError(f"Caminho base nao encontrado: {BASE_REPO_PATH}")
 
     OUTPUT_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
 
@@ -93,7 +89,7 @@ def main() -> None:
     df.to_csv(OUTPUT_CSV_PATH, index=False, encoding="utf-8")
 
     print(f"Funcoes extraidas: {len(df)}")
-    print(f"Arquivo salvo em: {OUTPUT_CSV_PATH.resolve()}")
+    print(f"Arquivo salvo em: {OUTPUT_CSV_PATH}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,2396 @@
+function_name,file_path,start_line,end_line,source_code,complexity_score,radon_rank,complexity_level,total_lines,useful_lines
+new_generation,cellular_automata\conways_game_of_life.py,26,69,"def new_generation(cells: list[list[int]]) -> list[list[int]]:
+    """"""
+    Generates the next generation for a given state of Conway's Game of Life.
+    >>> new_generation(BLINKER)
+    [[0, 0, 0], [1, 1, 1], [0, 0, 0]]
+    """"""
+    next_generation = []
+    for i in range(len(cells)):
+        next_generation_row = []
+        for j in range(len(cells[i])):
+            # Get the number of live neighbours
+            neighbour_count = 0
+            if i > 0 and j > 0:
+                neighbour_count += cells[i - 1][j - 1]
+            if i > 0:
+                neighbour_count += cells[i - 1][j]
+            if i > 0 and j < len(cells[i]) - 1:
+                neighbour_count += cells[i - 1][j + 1]
+            if j > 0:
+                neighbour_count += cells[i][j - 1]
+            if j < len(cells[i]) - 1:
+                neighbour_count += cells[i][j + 1]
+            if i < len(cells) - 1 and j > 0:
+                neighbour_count += cells[i + 1][j - 1]
+            if i < len(cells) - 1:
+                neighbour_count += cells[i + 1][j]
+            if i < len(cells) - 1 and j < len(cells[i]) - 1:
+                neighbour_count += cells[i + 1][j + 1]
+
+            # Rules of the game of life (excerpt from Wikipedia):
+            # 1. Any live cell with two or three live neighbours survives.
+            # 2. Any dead cell with three live neighbours becomes a live cell.
+            # 3. All other live cells die in the next generation.
+            #    Similarly, all other dead cells stay dead.
+            alive = cells[i][j] == 1
+            if (alive and 2 <= neighbour_count <= 3) or (
+                not alive and neighbour_count == 3
+            ):
+                next_generation_row.append(1)
+            else:
+                next_generation_row.append(0)
+
+        next_generation.append(next_generation_row)
+    return next_generation",19,C,alta,44,36
+visualise,cellular_automata\wa_tor.py,481,538,"def visualise(wt: WaTor, iter_number: int, *, colour: bool = True) -> None:
+    """"""
+    Visually displays the Wa-Tor planet using
+    an ascii code in terminal to clear and re-print
+    the Wa-Tor planet at intervals.
+
+    Uses ascii colour codes to colourfully display the predators and prey:
+        * (0x60f197) Prey = ``#``
+        * (0xfffff) Predator = ``x``
+
+    >>> wt = WaTor(30, 30)
+    >>> wt.set_planet([
+    ... [Entity(True, coords=(0, 0)), Entity(False, coords=(0, 1)), None],
+    ... [Entity(False, coords=(1, 0)), None, Entity(False, coords=(1, 2))],
+    ... [None, Entity(True, coords=(2, 1)), None]
+    ... ])
+    >>> visualise(wt, 0, colour=False)  # doctest: +NORMALIZE_WHITESPACE
+    #  x  .
+    x  .  x
+    .  #  .
+    <BLANKLINE>
+    Iteration: 0 | Prey count: 2 | Predator count: 3 |
+    """"""
+    if colour:
+        __import__(""os"").system("""")
+        print(""\x1b[0;0H\x1b[2J\x1b[?25l"")
+
+    reprint = ""\x1b[0;0H"" if colour else """"
+    ansi_colour_end = ""\x1b[0m "" if colour else "" ""
+
+    planet = wt.planet
+    output = """"
+
+    # Iterate over every entity in the planet
+    for row in planet:
+        for entity in row:
+            if entity is None:
+                output += "" . ""
+            else:
+                if colour is True:
+                    output += (
+                        ""\x1b[38;2;96;241;151m""
+                        if entity.prey
+                        else ""\x1b[38;2;255;255;15m""
+                    )
+                output += f"" {'#' if entity.prey else 'x'}{ansi_colour_end}""
+
+        output += ""\n""
+
+    entities = wt.get_entities()
+    prey_count = sum(entity.prey for entity in entities)
+
+    print(
+        f""{output}\n Iteration: {iter_number} | Prey count: {prey_count} | ""
+        f""Predator count: {len(entities) - prey_count} | {reprint}""
+    )
+    # Block the thread to be able to visualise seeing the algorithm
+    sleep(0.05)",11,C,alta,58,47
+del_node,data_structures\binary_tree\avl_tree.py,198,242,"def del_node(root: MyNode, data: Any) -> MyNode | None:
+    left_child = root.get_left()
+    right_child = root.get_right()
+    if root.get_data() == data:
+        if left_child is not None and right_child is not None:
+            temp_data = get_left_most(right_child)
+            root.set_data(temp_data)
+            root.set_right(del_node(right_child, temp_data))
+        elif left_child is not None:
+            root = left_child
+        elif right_child is not None:
+            root = right_child
+        else:
+            return None
+    elif root.get_data() > data:
+        if left_child is None:
+            print(""No such data"")
+            return root
+        else:
+            root.set_left(del_node(left_child, data))
+    # root.get_data() < data
+    elif right_child is None:
+        return root
+    else:
+        root.set_right(del_node(right_child, data))
+
+    # Re-fetch left_child and right_child references
+    left_child = root.get_left()
+    right_child = root.get_right()
+
+    if get_height(right_child) - get_height(left_child) == 2:
+        assert right_child is not None
+        if get_height(right_child.get_right()) > get_height(right_child.get_left()):
+            root = left_rotation(root)
+        else:
+            root = rl_rotation(root)
+    elif get_height(right_child) - get_height(left_child) == -2:
+        assert left_child is not None
+        if get_height(left_child.get_left()) > get_height(left_child.get_right()):
+            root = right_rotation(root)
+        else:
+            root = lr_rotation(root)
+    height = my_max(get_height(root.get_right()), get_height(root.get_left())) + 1
+    root.set_height(height)
+    return root",15,C,alta,45,41
+is_palindrome_stack,data_structures\linked_list\is_palindrome.py,68,121,"def is_palindrome_stack(head: ListNode | None) -> bool:
+    """"""
+    Check if a linked list is a palindrome using a stack.
+
+    Args:
+        head (ListNode): The head of the linked list.
+
+    Returns:
+        bool: True if the linked list is a palindrome, False otherwise.
+
+    Examples:
+        >>> is_palindrome_stack(None)
+        True
+
+        >>> is_palindrome_stack(ListNode(1))
+        True
+
+        >>> is_palindrome_stack(ListNode(1, ListNode(2)))
+        False
+
+        >>> is_palindrome_stack(ListNode(1, ListNode(2, ListNode(1))))
+        True
+
+        >>> is_palindrome_stack(ListNode(1, ListNode(2, ListNode(2, ListNode(1)))))
+        True
+    """"""
+    if not head or not head.next_node:
+        return True
+
+    # 1. Get the midpoint (slow)
+    slow: ListNode | None = head
+    fast: ListNode | None = head
+    while fast and fast.next_node:
+        fast = fast.next_node.next_node
+        slow = slow.next_node if slow else None
+
+    # slow will always be defined,
+    # adding this check to resolve mypy static check
+    if slow:
+        stack = [slow.val]
+
+        # 2. Push the second half into the stack
+        while slow.next_node:
+            slow = slow.next_node
+            stack.append(slow.val)
+
+        # 3. Comparison
+        cur: ListNode | None = head
+        while stack and cur:
+            if stack.pop() != cur.val:
+                return False
+            cur = cur.next_node
+
+    return True",11,C,alta,54,37
+infix_to_postfix,data_structures\stacks\infix_to_postfix_conversion.py,45,102,"def infix_to_postfix(expression_str: str) -> str:
+    """"""
+    >>> infix_to_postfix(""(1*(2+3)+4))"")
+    Traceback (most recent call last):
+        ...
+    ValueError: Mismatched parentheses
+    >>> infix_to_postfix("""")
+    ''
+    >>> infix_to_postfix(""3+2"")
+    '3 2 +'
+    >>> infix_to_postfix(""(3+4)*5-6"")
+    '3 4 + 5 * 6 -'
+    >>> infix_to_postfix(""(1+2)*3/4-5"")
+    '1 2 + 3 * 4 / 5 -'
+    >>> infix_to_postfix(""a+b*c+(d*e+f)*g"")
+    'a b c * + d e * f + g * +'
+    >>> infix_to_postfix(""x^y/(5*z)+2"")
+    'x y ^ 5 z * / 2 +'
+    >>> infix_to_postfix(""2^3^2"")
+    '2 3 2 ^ ^'
+    """"""
+    if not balanced_parentheses(expression_str):
+        raise ValueError(""Mismatched parentheses"")
+    stack: Stack[str] = Stack()
+    postfix = []
+    for char in expression_str:
+        if char.isalpha() or char.isdigit():
+            postfix.append(char)
+        elif char == ""("":
+            stack.push(char)
+        elif char == "")"":
+            while not stack.is_empty() and stack.peek() != ""("":
+                postfix.append(stack.pop())
+            stack.pop()
+        else:
+            while True:
+                if stack.is_empty():
+                    stack.push(char)
+                    break
+
+                char_precedence = precedence(char)
+                tos_precedence = precedence(stack.peek())
+
+                if char_precedence > tos_precedence:
+                    stack.push(char)
+                    break
+                if char_precedence < tos_precedence:
+                    postfix.append(stack.pop())
+                    continue
+                # Precedences are equal
+                if associativity(char) == ""RL"":
+                    stack.push(char)
+                    break
+                postfix.append(stack.pop())
+
+    while not stack.is_empty():
+        postfix.append(stack.pop())
+    return "" "".join(postfix)",15,C,alta,58,54
+convex_hull_bf,divide_and_conquer\convex_hull.py,223,292,"def convex_hull_bf(points: list[Point]) -> list[Point]:
+    """"""
+    Constructs the convex hull of a set of 2D points using a brute force algorithm.
+    The algorithm basically considers all combinations of points (i, j) and uses the
+    definition of convexity to determine whether (i, j) is part of the convex hull or
+    not.  (i, j) is part of the convex hull if and only iff there are no points on both
+    sides of the line segment connecting the ij, and there is no point k such that k is
+    on either end of the ij.
+
+    Runtime: O(n^3) - definitely horrible
+
+    Parameters
+    ---------
+    points: array-like of object of Points, lists or tuples.
+    The set of  2d points for which the convex-hull is needed
+
+    Returns
+    ------
+    convex_set: list, the convex-hull of points sorted in non-decreasing order.
+
+    See Also
+    --------
+    convex_hull_recursive,
+
+     Examples
+     ---------
+     >>> convex_hull_bf([[0, 0], [1, 0], [10, 1]])
+     [(0.0, 0.0), (1.0, 0.0), (10.0, 1.0)]
+     >>> convex_hull_bf([[0, 0], [1, 0], [10, 0]])
+     [(0.0, 0.0), (10.0, 0.0)]
+     >>> convex_hull_bf([[-1, 1],[-1, -1], [0, 0], [0.5, 0.5], [1, -1], [1, 1],
+     ...                 [-0.75, 1]])
+     [(-1.0, -1.0), (-1.0, 1.0), (1.0, -1.0), (1.0, 1.0)]
+     >>> convex_hull_bf([(0, 3), (2, 2), (1, 1), (2, 1), (3, 0), (0, 0), (3, 3),
+     ...                 (2, -1), (2, -4), (1, -3)])
+     [(0.0, 0.0), (0.0, 3.0), (1.0, -3.0), (2.0, -4.0), (3.0, 0.0), (3.0, 3.0)]
+    """"""
+
+    points = sorted(_validate_input(points))
+    n = len(points)
+    convex_set = set()
+
+    for i in range(n - 1):
+        for j in range(i + 1, n):
+            points_left_of_ij = points_right_of_ij = False
+            ij_part_of_convex_hull = True
+            for k in range(n):
+                if k not in {i, j}:
+                    det_k = _det(points[i], points[j], points[k])
+
+                    if det_k > 0:
+                        points_left_of_ij = True
+                    elif det_k < 0:
+                        points_right_of_ij = True
+                    # point[i], point[j], point[k] all lie on a straight line
+                    # if point[k] is to the left of point[i] or it's to the
+                    # right of point[j], then point[i], point[j] cannot be
+                    # part of the convex hull of A
+                    elif points[k] < points[i] or points[k] > points[j]:
+                        ij_part_of_convex_hull = False
+                        break
+
+                if points_left_of_ij and points_right_of_ij:
+                    ij_part_of_convex_hull = False
+                    break
+
+            if ij_part_of_convex_hull:
+                convex_set.update([points[i], points[j]])
+
+    return sorted(convex_set)",12,C,alta,70,55
+find_min,dynamic_programming\minimum_partition.py,6,70,"def find_min(numbers: list[int]) -> int:
+    """"""
+    >>> find_min([1, 2, 3, 4, 5])
+    1
+    >>> find_min([5, 5, 5, 5, 5])
+    5
+    >>> find_min([5, 5, 5, 5])
+    0
+    >>> find_min([3])
+    3
+    >>> find_min([])
+    0
+    >>> find_min([1, 2, 3, 4])
+    0
+    >>> find_min([0, 0, 0, 0])
+    0
+    >>> find_min([-1, -5, 5, 1])
+    0
+    >>> find_min([-1, -5, 5, 1])
+    0
+    >>> find_min([9, 9, 9, 9, 9])
+    9
+    >>> find_min([1, 5, 10, 3])
+    1
+    >>> find_min([-1, 0, 1])
+    0
+    >>> find_min(range(10, 0, -1))
+    1
+    >>> find_min([-1])
+    Traceback (most recent call last):
+        --
+    IndexError: list assignment index out of range
+    >>> find_min([0, 0, 0, 1, 2, -4])
+    Traceback (most recent call last):
+        ...
+    IndexError: list assignment index out of range
+    >>> find_min([-1, -5, -10, -3])
+    Traceback (most recent call last):
+        ...
+    IndexError: list assignment index out of range
+    """"""
+    n = len(numbers)
+    s = sum(numbers)
+
+    dp = [[False for x in range(s + 1)] for y in range(n + 1)]
+
+    for i in range(n + 1):
+        dp[i][0] = True
+
+    for i in range(1, s + 1):
+        dp[0][i] = False
+
+    for i in range(1, n + 1):
+        for j in range(1, s + 1):
+            dp[i][j] = dp[i - 1][j]
+
+            if numbers[i - 1] <= j:
+                dp[i][j] = dp[i][j] or dp[i - 1][j - numbers[i - 1]]
+
+    for j in range(int(s / 2), -1, -1):
+        if dp[n][j] is True:
+            diff = s - 2 * j
+            break
+
+    return diff",11,C,alta,65,58
+segments_intersect,geometry\segment_intersection.py,66,100,"def segments_intersect(p1: Point, p2: Point, p3: Point, p4: Point) -> bool:
+    """"""Return True if line segment p1p2 intersects line segment p3p4.
+
+    Uses the CLRS cross-product / orientation method.  Handles both the
+    general case (proper crossing) and degenerate cases where one endpoint
+    lies exactly on the other segment.
+
+    >>> segments_intersect(Point(0, 0), Point(2, 2), Point(0, 2), Point(2, 0))
+    True
+    >>> segments_intersect(Point(0, 0), Point(2, 2), Point(1, 1), Point(3, 3))
+    True
+    >>> segments_intersect(Point(0, 0), Point(1, 0), Point(2, 0), Point(3, 0))
+    False
+    >>> segments_intersect(Point(0, 0), Point(1, 1), Point(1, 0), Point(2, 1))
+    False
+    >>> segments_intersect(Point(0, 0), Point(1, 1), Point(0, 1), Point(0, 2))
+    False
+    >>> segments_intersect(Point(0, 0), Point(1, 0), Point(1, 0), Point(2, 0))
+    True
+    """"""
+    d1 = direction(p3, p4, p1)
+    d2 = direction(p3, p4, p2)
+    d3 = direction(p1, p2, p3)
+    d4 = direction(p1, p2, p4)
+
+    if ((d1 < 0 < d2) or (d2 < 0 < d1)) and ((d3 < 0 < d4) or (d4 < 0 < d3)):
+        return True
+
+    if d1 == 0 and on_segment(p3, p4, p1):
+        return True
+    if d2 == 0 and on_segment(p3, p4, p2):
+        return True
+    if d3 == 0 and on_segment(p1, p2, p3):
+        return True
+    return d4 == 0 and on_segment(p1, p2, p4)",12,C,alta,35,31
+floyd_warshall,graphs\graphs_floyd_warshall.py,19,56,"def floyd_warshall(graph, v):
+    """"""
+    :param graph: 2D array calculated from weight[edge[i, j]]
+    :type graph: List[List[float]]
+    :param v: number of vertices
+    :type v: int
+    :return: shortest distance between all vertex pairs
+    distance[u][v] will contain the shortest distance from vertex u to v.
+
+    1. For all edges from v to n, distance[i][j] = weight(edge(i, j)).
+    3. The algorithm then performs distance[i][j] = min(distance[i][j], distance[i][k] +
+        distance[k][j]) for each possible pair i, j of vertices.
+    4. The above is repeated for each vertex k in the graph.
+    5. Whenever distance[i][j] is given a new minimum value, next vertex[i][j] is
+        updated to the next vertex[i][k].
+    """"""
+
+    dist = [[float(""inf"") for _ in range(v)] for _ in range(v)]
+
+    for i in range(v):
+        for j in range(v):
+            dist[i][j] = graph[i][j]
+
+            # check vertex k against all other vertices (i, j)
+    for k in range(v):
+        # looping through rows of graph array
+        for i in range(v):
+            # looping through columns of graph array
+            for j in range(v):
+                if (
+                    dist[i][k] != float(""inf"")
+                    and dist[k][j] != float(""inf"")
+                    and dist[i][k] + dist[k][j] < dist[i][j]
+                ):
+                    dist[i][j] = dist[i][k] + dist[k][j]
+
+    _print_dist(dist, v)
+    return dist, v",11,C,alta,38,30
+do_something,graphs\multi_heuristic_astar.py,81,120,"def do_something(back_pointer, goal, start):
+    grid = np.char.chararray((n, n))
+    for i in range(n):
+        for j in range(n):
+            grid[i][j] = ""*""
+
+    for i in range(n):
+        for j in range(n):
+            if (j, (n - 1) - i) in blocks:
+                grid[i][j] = ""#""
+
+    grid[0][(n - 1)] = ""-""
+    x = back_pointer[goal]
+    while x != start:
+        (x_c, y_c) = x
+        # print(x)
+        grid[(n - 1) - y_c][x_c] = ""-""
+        x = back_pointer[x]
+    grid[(n - 1)][0] = ""-""
+
+    for i in range(n):
+        for j in range(n):
+            if (i, j) == (0, n - 1):
+                print(grid[i][j], end="" "")
+                print(""<-- End position"", end="" "")
+            else:
+                print(grid[i][j], end="" "")
+        print()
+    print(""^"")
+    print(""Start position"")
+    print()
+    print(""# is an obstacle"")
+    print(""- is the path taken by algorithm"")
+    print(""PATH TAKEN BY THE ALGORITHM IS:-"")
+    x = back_pointer[goal]
+    while x != start:
+        print(x, end="" "")
+        x = back_pointer[x]
+    print(x)
+    sys.exit()",11,C,alta,40,36
+calc_profit,knapsack\greedy_knapsack.py,20,84,"def calc_profit(profit: list, weight: list, max_weight: int) -> int:
+    """"""
+    Function description is as follows-
+    :param profit: Take a list of profits
+    :param weight: Take a list of weight if bags corresponding to the profits
+    :param max_weight: Maximum weight that could be carried
+    :return: Maximum expected gain
+
+    >>> calc_profit([1, 2, 3], [3, 4, 5], 15)
+    6
+    >>> calc_profit([10, 9 , 8], [3 ,4 , 5], 25)
+    27
+    """"""
+    if len(profit) != len(weight):
+        raise ValueError(""The length of profit and weight must be same."")
+    if max_weight <= 0:
+        raise ValueError(""max_weight must greater than zero."")
+    if any(p < 0 for p in profit):
+        raise ValueError(""Profit can not be negative."")
+    if any(w < 0 for w in weight):
+        raise ValueError(""Weight can not be negative."")
+
+    # List created to store profit gained for the 1kg in case of each weight
+    # respectively.  Calculate and append profit/weight for each element.
+    profit_by_weight = [p / w for p, w in zip(profit, weight)]
+
+    # Creating a copy of the list and sorting profit/weight in ascending order
+    sorted_profit_by_weight = sorted(profit_by_weight)
+
+    # declaring useful variables
+    length = len(sorted_profit_by_weight)
+    limit = 0
+    gain = 0
+    i = 0
+
+    # loop till the total weight do not reach max limit e.g. 15 kg and till i<length
+    while limit <= max_weight and i < length:
+        # flag value for encountered greatest element in sorted_profit_by_weight
+        biggest_profit_by_weight = sorted_profit_by_weight[length - i - 1]
+        """"""
+        Calculate the index of the biggest_profit_by_weight in profit_by_weight list.
+        This will give the index of the first encountered element which is same as of
+        biggest_profit_by_weight.  There may be one or more values same as that of
+        biggest_profit_by_weight but index always encounter the very first element
+        only.  To curb this alter the values in profit_by_weight once they are used
+        here it is done to -1 because neither profit nor weight can be in negative.
+        """"""
+        index = profit_by_weight.index(biggest_profit_by_weight)
+        profit_by_weight[index] = -1
+
+        # check if the weight encountered is less than the total weight
+        # encountered before.
+        if max_weight - limit >= weight[index]:
+            limit += weight[index]
+            # Adding profit gained for the given weight 1 ===
+            # weight[index]/weight[index]
+            gain += 1 * profit[index]
+        else:
+            # Since the weight encountered is greater than limit, therefore take the
+            # required number of remaining kgs and calculate profit for it.
+            # weight remaining / weight[index]
+            gain += (max_weight - limit) / weight[index] * profit[index]
+            break
+        i += 1
+    return gain",11,C,alta,65,46
+create_tree,machine_learning\frequent_pattern_growth.py,55,125,"def create_tree(data_set: list, min_sup: int = 1) -> tuple[TreeNode, dict]:
+    """"""
+    Create Frequent Pattern tree
+
+    Args:
+        data_set: A list of transactions, where each transaction is a list of items.
+        min_sup: The minimum support threshold.
+        Items with support less than this will be pruned. Default is 1.
+
+    Returns:
+        The root of the FP-Tree.
+        header_table: The header table dictionary with item information.
+
+    Example:
+    >>> data_set = [
+    ...    ['A', 'B', 'C'],
+    ...    ['A', 'C'],
+    ...    ['A', 'B', 'E'],
+    ...    ['A', 'B', 'C', 'E'],
+    ...    ['B', 'E']
+    ... ]
+    >>> min_sup = 2
+    >>> fp_tree, header_table = create_tree(data_set, min_sup)
+    >>> fp_tree
+    TreeNode('Null Set', 1, None)
+    >>> len(header_table)
+    4
+    >>> header_table[""A""]
+    [[4, None], TreeNode('A', 4, TreeNode('Null Set', 1, None))]
+    >>> header_table[""E""][1]  # doctest: +NORMALIZE_WHITESPACE
+    TreeNode('E', 1, TreeNode('B', 3, TreeNode('A', 4, TreeNode('Null Set', 1, None))))
+    >>> sorted(header_table)
+    ['A', 'B', 'C', 'E']
+    >>> fp_tree.name
+    'Null Set'
+    >>> sorted(fp_tree.children)
+    ['A', 'B']
+    >>> fp_tree.children['A'].name
+    'A'
+    >>> sorted(fp_tree.children['A'].children)
+    ['B', 'C']
+    """"""
+    header_table: dict = {}
+    for trans in data_set:
+        for item in trans:
+            header_table[item] = header_table.get(item, [0, None])
+            header_table[item][0] += 1
+
+    for k in list(header_table):
+        if header_table[k][0] < min_sup:
+            del header_table[k]
+
+    if not (freq_item_set := set(header_table)):
+        return TreeNode(""Null Set"", 1, None), {}
+
+    for key, value in header_table.items():
+        header_table[key] = [value, None]
+
+    fp_tree = TreeNode(""Null Set"", 1, None)  # Parent is None for the root node
+    for tran_set in data_set:
+        local_d = {
+            item: header_table[item][0] for item in tran_set if item in freq_item_set
+        }
+        if local_d:
+            sorted_items = sorted(
+                local_d.items(), key=lambda item_info: item_info[1], reverse=True
+            )
+            ordered_items = [item[0] for item in sorted_items]
+            update_tree(ordered_items, fp_tree, header_table, 1)
+
+    return fp_tree, header_table",12,C,alta,71,63
+jaccard_similarity,maths\jaccard_similarity.py,17,89,"def jaccard_similarity(
+    set_a: set[str] | list[str] | tuple[str],
+    set_b: set[str] | list[str] | tuple[str],
+    alternative_union=False,
+):
+    """"""
+    Finds the jaccard similarity between two sets.
+    Essentially, its intersection over union.
+
+    The alternative way to calculate this is to take union as sum of the
+    number of items in the two sets. This will lead to jaccard similarity
+    of a set with itself be 1/2 instead of 1. [MMDS 2nd Edition, Page 77]
+
+    Parameters:
+        :set_a (set,list,tuple): A non-empty set/list
+        :set_b (set,list,tuple): A non-empty set/list
+        :alternativeUnion (boolean): If True, use sum of number of
+        items as union
+
+    Output:
+        (float) The jaccard similarity between the two sets.
+
+    Examples:
+    >>> set_a = {'a', 'b', 'c', 'd', 'e'}
+    >>> set_b = {'c', 'd', 'e', 'f', 'h', 'i'}
+    >>> jaccard_similarity(set_a, set_b)
+    0.375
+    >>> jaccard_similarity(set_a, set_a)
+    1.0
+    >>> jaccard_similarity(set_a, set_a, True)
+    0.5
+    >>> set_a = ['a', 'b', 'c', 'd', 'e']
+    >>> set_b = ('c', 'd', 'e', 'f', 'h', 'i')
+    >>> jaccard_similarity(set_a, set_b)
+    0.375
+    >>> set_a = ('c', 'd', 'e', 'f', 'h', 'i')
+    >>> set_b = ['a', 'b', 'c', 'd', 'e']
+    >>> jaccard_similarity(set_a, set_b)
+    0.375
+    >>> set_a = ('c', 'd', 'e', 'f', 'h', 'i')
+    >>> set_b = ['a', 'b', 'c', 'd']
+    >>> jaccard_similarity(set_a, set_b, True)
+    0.2
+    >>> set_a = {'a', 'b'}
+    >>> set_b = ['c', 'd']
+    >>> jaccard_similarity(set_a, set_b)
+    Traceback (most recent call last):
+        ...
+    ValueError: Set a and b must either both be sets or be either a list or a tuple.
+    """"""
+
+    if isinstance(set_a, set) and isinstance(set_b, set):
+        intersection_length = len(set_a.intersection(set_b))
+
+        if alternative_union:
+            union_length = len(set_a) + len(set_b)
+        else:
+            union_length = len(set_a.union(set_b))
+
+        return intersection_length / union_length
+
+    elif isinstance(set_a, (list, tuple)) and isinstance(set_b, (list, tuple)):
+        intersection = [element for element in set_a if element in set_b]
+
+        if alternative_union:
+            return len(intersection) / (len(set_a) + len(set_b))
+        else:
+            # Cast set_a to list because tuples cannot be mutated
+            union = list(set_a) + [element for element in set_b if element not in set_a]
+            return len(intersection) / len(union)
+    raise ValueError(
+        ""Set a and b must either both be sets or be either a list or a tuple.""
+    )",11,C,alta,73,63
+sieve,maths\segmented_sieve.py,6,71,"def sieve(n: int) -> list[int]:
+    """"""
+    Segmented Sieve.
+
+    Examples:
+    >>> sieve(8)
+    [2, 3, 5, 7]
+
+    >>> sieve(27)
+    [2, 3, 5, 7, 11, 13, 17, 19, 23]
+
+    >>> sieve(0)
+    Traceback (most recent call last):
+        ...
+    ValueError: Number 0 must instead be a positive integer
+
+    >>> sieve(-1)
+    Traceback (most recent call last):
+        ...
+    ValueError: Number -1 must instead be a positive integer
+
+    >>> sieve(22.2)
+    Traceback (most recent call last):
+        ...
+    ValueError: Number 22.2 must instead be a positive integer
+    """"""
+
+    if n <= 0 or isinstance(n, float):
+        msg = f""Number {n} must instead be a positive integer""
+        raise ValueError(msg)
+
+    in_prime = []
+    start = 2
+    end = int(math.sqrt(n))  # Size of every segment
+    temp = [True] * (end + 1)
+    prime = []
+
+    while start <= end:
+        if temp[start] is True:
+            in_prime.append(start)
+            for i in range(start * start, end + 1, start):
+                temp[i] = False
+        start += 1
+    prime += in_prime
+
+    low = end + 1
+    high = min(2 * end, n)
+
+    while low <= n:
+        temp = [True] * (high - low + 1)
+        for each in in_prime:
+            t = math.floor(low / each) * each
+            if t < low:
+                t += each
+
+            for j in range(t, high + 1, each):
+                temp[j - low] = False
+
+        for j in range(len(temp)):
+            if temp[j] is True:
+                prime.append(j + low)
+
+        low = high + 1
+        high = min(high + end, n)
+
+    return prime",12,C,alta,66,52
+three_sum,maths\three_sum.py,6,41,"def three_sum(nums: list[int]) -> list[list[int]]:
+    """"""
+    Find all unique triplets in a sorted array of integers that sum up to zero.
+
+    Args:
+        nums: A sorted list of integers.
+
+    Returns:
+        A list of lists containing unique triplets that sum up to zero.
+
+    >>> three_sum([-1, 0, 1, 2, -1, -4])
+    [[-1, -1, 2], [-1, 0, 1]]
+    >>> three_sum([1, 2, 3, 4])
+    []
+    """"""
+    nums.sort()
+    ans = []
+    for i in range(len(nums) - 2):
+        if i == 0 or (nums[i] != nums[i - 1]):
+            low, high, c = i + 1, len(nums) - 1, 0 - nums[i]
+            while low < high:
+                if nums[low] + nums[high] == c:
+                    ans.append([nums[i], nums[low], nums[high]])
+
+                    while low < high and nums[low] == nums[low + 1]:
+                        low += 1
+                    while low < high and nums[high] == nums[high - 1]:
+                        high -= 1
+
+                    low += 1
+                    high -= 1
+                elif nums[low] + nums[high] < c:
+                    low += 1
+                else:
+                    high -= 1
+    return ans",11,C,alta,36,31
+spiral_print_clockwise,matrix\spiral_print.py,30,76,"def spiral_print_clockwise(a: list[list[int]]) -> None:
+    """"""
+    >>> spiral_print_clockwise([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
+    1
+    2
+    3
+    4
+    8
+    12
+    11
+    10
+    9
+    5
+    6
+    7
+    """"""
+    if check_matrix(a) and len(a) > 0:
+        a = [list(row) for row in a]
+        mat_row = len(a)
+        if isinstance(a[0], list):
+            mat_col = len(a[0])
+        else:
+            for dat in a:
+                print(dat)
+            return
+
+        # horizotal printing increasing
+        for i in range(mat_col):
+            print(a[0][i])
+        # vertical printing down
+        for i in range(1, mat_row):
+            print(a[i][mat_col - 1])
+        # horizotal printing decreasing
+        if mat_row > 1:
+            for i in range(mat_col - 2, -1, -1):
+                print(a[mat_row - 1][i])
+        # vertical printing up
+        for i in range(mat_row - 2, 0, -1):
+            print(a[i][0])
+        remain_mat = [row[1 : mat_col - 1] for row in a[1 : mat_row - 1]]
+        if len(remain_mat) > 0:
+            spiral_print_clockwise(remain_mat)
+        else:
+            return
+    else:
+        print(""Not a valid matrix"")
+        return",13,C,alta,47,42
+graham_scan,other\graham_scan.py,93,172,"def graham_scan(points: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """"""Pure implementation of graham scan algorithm in Python
+
+    :param points: The unique points on coordinates.
+    :return: The points on convex hell.
+
+    Examples:
+    >>> graham_scan([(9, 6), (3, 1), (0, 0), (5, 5), (5, 2), (7, 0), (3, 3), (1, 4)])
+    [(0, 0), (7, 0), (9, 6), (5, 5), (1, 4)]
+
+    >>> graham_scan([(0, 0), (1, 0), (1, 1), (0, 1)])
+    [(0, 0), (1, 0), (1, 1), (0, 1)]
+
+    >>> graham_scan([(0, 0), (1, 1), (2, 2), (3, 3), (-1, 2)])
+    [(0, 0), (1, 1), (2, 2), (3, 3), (-1, 2)]
+
+    >>> graham_scan([(-100, 20), (99, 3), (1, 10000001), (5133186, -25), (-66, -4)])
+    [(5133186, -25), (1, 10000001), (-100, 20), (-66, -4)]
+    """"""
+
+    if len(points) <= 2:
+        # There is no convex hull
+        raise ValueError(""graham_scan: argument must contain more than 3 points."")
+    if len(points) == 3:
+        return points
+    # find the lowest and the most left point
+    minidx = 0
+    miny, minx = maxsize, maxsize
+    for i, point in enumerate(points):
+        x = point[0]
+        y = point[1]
+        if y < miny:
+            miny = y
+            minx = x
+            minidx = i
+        if y == miny and x < minx:
+            minx = x
+            minidx = i
+
+    # remove the lowest and the most left point from points for preparing for sort
+    points.pop(minidx)
+
+    sorted_points = sorted(points, key=lambda point: angle_comparer(point, minx, miny))
+    # This insert actually costs complexity,
+    # and you should instead add (minx, miny) into stack later.
+    # I'm using insert just for easy understanding.
+    sorted_points.insert(0, (minx, miny))
+
+    stack: deque[tuple[int, int]] = deque()
+    stack.append(sorted_points[0])
+    stack.append(sorted_points[1])
+    stack.append(sorted_points[2])
+    # The first 3 points lines are towards the left because we sort them by their angle
+    # from minx, miny.
+    current_direction = Direction.left
+
+    for i in range(3, len(sorted_points)):
+        while True:
+            starting = stack[-2]
+            via = stack[-1]
+            target = sorted_points[i]
+            next_direction = check_direction(starting, via, target)
+
+            if next_direction == Direction.left:
+                current_direction = Direction.left
+                break
+            if next_direction == Direction.straight:
+                if current_direction == Direction.left:
+                    # We keep current_direction as left.
+                    # Because if the straight line keeps as straight,
+                    # we want to know if this straight line is towards left.
+                    break
+                elif current_direction == Direction.right:
+                    # If the straight line is towards right,
+                    # every previous points on that straight line is not convex hull.
+                    stack.pop()
+            if next_direction == Direction.right:
+                stack.pop()
+        stack.append(sorted_points[i])
+    return list(stack)",14,C,alta,80,56
+strand_sort,sorts\strand_sort.py,4,46,"def strand_sort(arr: list, reverse: bool = False, solution: list | None = None) -> list:
+    """"""
+    Strand sort implementation
+    source: https://en.wikipedia.org/wiki/Strand_sort
+
+    :param arr: Unordered input list
+    :param reverse: Descent ordering flag
+    :param solution: Ordered items container
+
+    Examples:
+    >>> strand_sort([4, 2, 5, 3, 0, 1])
+    [0, 1, 2, 3, 4, 5]
+
+    >>> strand_sort([4, 2, 5, 3, 0, 1], reverse=True)
+    [5, 4, 3, 2, 1, 0]
+    """"""
+    _operator = operator.lt if reverse else operator.gt
+    solution = solution or []
+
+    if not arr:
+        return solution
+
+    sublist = [arr.pop(0)]
+    for i, item in enumerate(arr):
+        if _operator(item, sublist[-1]):
+            sublist.append(item)
+            arr.pop(i)
+
+    #  merging sublist into solution list
+    if not solution:
+        solution.extend(sublist)
+    else:
+        while sublist:
+            item = sublist.pop(0)
+            for i, xx in enumerate(solution):
+                if not _operator(item, xx):
+                    solution.insert(i, item)
+                    break
+            else:
+                solution.append(item)
+
+    strand_sort(arr, reverse, solution)
+    return solution",11,C,alta,43,35
+palindromic_string,strings\manacher.py,1,67,"def palindromic_string(input_string: str) -> str:
+    """"""
+    >>> palindromic_string('abbbaba')
+    'abbba'
+    >>> palindromic_string('ababa')
+    'ababa'
+
+    Manacher's algorithm which finds Longest palindromic Substring in linear time.
+
+    1. first this convert input_string(""xyx"") into new_string(""x|y|x"") where odd
+        positions are actual input characters.
+    2. for each character in new_string it find corresponding length and
+        store the length and left,right to store previously calculated info.
+        (please look the explanation for details)
+
+    3. return corresponding output_string by removing all ""|""
+    """"""
+    max_length = 0
+
+    # if input_string is ""aba"" than new_input_string become ""a|b|a""
+    new_input_string = """"
+    output_string = """"
+
+    # append each character + ""|"" in new_string for range(0, length-1)
+    for i in input_string[: len(input_string) - 1]:
+        new_input_string += i + ""|""
+    # append last character
+    new_input_string += input_string[-1]
+
+    # we will store the starting and ending of previous furthest ending palindromic
+    # substring
+    left, right = 0, 0
+
+    # length[i] shows the length of palindromic substring with center i
+    length = [1 for i in range(len(new_input_string))]
+
+    # for each character in new_string find corresponding palindromic string
+    start = 0
+    for j in range(len(new_input_string)):
+        k = 1 if j > right else min(length[left + right - j] // 2, right - j + 1)
+        while (
+            j - k >= 0
+            and j + k < len(new_input_string)
+            and new_input_string[k + j] == new_input_string[j - k]
+        ):
+            k += 1
+
+        length[j] = 2 * k - 1
+
+        # does this string is ending after the previously explored end (that is right) ?
+        # if yes the update the new right to the last index of this
+        if j + k - 1 > right:
+            left = j - k + 1
+            right = j + k - 1
+
+        # update max_length and start position
+        if max_length < length[j]:
+            max_length = length[j]
+            start = j
+
+    # create that string
+    s = new_input_string[start - max_length // 2 : start + max_length // 2 + 1]
+    for i in s:
+        if i != ""|"":
+            output_string += i
+
+    return output_string",12,C,alta,67,43
+compute_transform_tables,strings\min_cost_string_conversion.py,12,73,"def compute_transform_tables(
+    source_string: str,
+    destination_string: str,
+    copy_cost: int,
+    replace_cost: int,
+    delete_cost: int,
+    insert_cost: int,
+) -> tuple[list[list[int]], list[list[str]]]:
+    """"""
+    Finds the most cost efficient sequence
+    for converting one string into another.
+
+    >>> costs, operations = compute_transform_tables(""cat"", ""cut"", 1, 2, 3, 3)
+    >>> costs[0][:4]
+    [0, 3, 6, 9]
+    >>> costs[2][:4]
+    [6, 4, 3, 6]
+    >>> operations[0][:4]
+    ['0', 'Ic', 'Iu', 'It']
+    >>> operations[3][:4]
+    ['Dt', 'Dt', 'Rtu', 'Ct']
+
+    >>> compute_transform_tables("""", """", 1, 2, 3, 3)
+    ([[0]], [['0']])
+    """"""
+    source_seq = list(source_string)
+    destination_seq = list(destination_string)
+    len_source_seq = len(source_seq)
+    len_destination_seq = len(destination_seq)
+    costs = [
+        [0 for _ in range(len_destination_seq + 1)] for _ in range(len_source_seq + 1)
+    ]
+    ops = [
+        [""0"" for _ in range(len_destination_seq + 1)] for _ in range(len_source_seq + 1)
+    ]
+
+    for i in range(1, len_source_seq + 1):
+        costs[i][0] = i * delete_cost
+        ops[i][0] = f""D{source_seq[i - 1]}""
+
+    for i in range(1, len_destination_seq + 1):
+        costs[0][i] = i * insert_cost
+        ops[0][i] = f""I{destination_seq[i - 1]}""
+
+    for i in range(1, len_source_seq + 1):
+        for j in range(1, len_destination_seq + 1):
+            if source_seq[i - 1] == destination_seq[j - 1]:
+                costs[i][j] = costs[i - 1][j - 1] + copy_cost
+                ops[i][j] = f""C{source_seq[i - 1]}""
+            else:
+                costs[i][j] = costs[i - 1][j - 1] + replace_cost
+                ops[i][j] = f""R{source_seq[i - 1]}"" + str(destination_seq[j - 1])
+
+            if costs[i - 1][j] + delete_cost < costs[i][j]:
+                costs[i][j] = costs[i - 1][j] + delete_cost
+                ops[i][j] = f""D{source_seq[i - 1]}""
+
+            if costs[i][j - 1] + insert_cost < costs[i][j]:
+                costs[i][j] = costs[i][j - 1] + insert_cost
+                ops[i][j] = f""I{destination_seq[j - 1]}""
+
+    return costs, ops",12,C,alta,62,54
+combination_sum,backtracking\combination_sum.py,41,65,"def combination_sum(candidates: list, target: int) -> list:
+    """"""
+    >>> combination_sum([2, 3, 5], 8)
+    [[2, 2, 2, 2], [2, 3, 3], [3, 5]]
+    >>> combination_sum([2, 3, 6, 7], 7)
+    [[2, 2, 3], [7]]
+    >>> combination_sum([-8, 2.3, 0], 1)
+    Traceback (most recent call last):
+        ...
+    ValueError: All elements in candidates must be non-negative
+    >>> combination_sum([], 1)
+    Traceback (most recent call last):
+        ...
+    ValueError: Candidates list should not be empty
+    """"""
+    if not candidates:
+        raise ValueError(""Candidates list should not be empty"")
+
+    if any(x < 0 for x in candidates):
+        raise ValueError(""All elements in candidates must be non-negative"")
+
+    path = []  # type: list[int]
+    answer = []  # type: list[int]
+    backtrack(candidates, path, answer, target, 0)
+    return answer",4,A,baixa,25,23
+find_unique_number,bit_manipulation\find_unique_number.py,1,31,"def find_unique_number(arr: list[int]) -> int:
+    """"""
+    Given a list of integers where every element appears twice except for one,
+    this function returns the element that appears only once using bitwise XOR.
+
+    >>> find_unique_number([1, 1, 2, 2, 3])
+    3
+    >>> find_unique_number([4, 5, 4, 6, 6])
+    5
+    >>> find_unique_number([7])
+    7
+    >>> find_unique_number([10, 20, 10])
+    20
+    >>> find_unique_number([])
+    Traceback (most recent call last):
+        ...
+    ValueError: input list must not be empty
+    >>> find_unique_number([1, 'a', 1])
+    Traceback (most recent call last):
+        ...
+    TypeError: all elements must be integers
+    """"""
+    if not arr:
+        raise ValueError(""input list must not be empty"")
+    if not all(isinstance(x, int) for x in arr):
+        raise TypeError(""all elements must be integers"")
+
+    result = 0
+    for num in arr:
+        result ^= num
+    return result",5,A,baixa,31,29
+get_highest_set_bit_position,bit_manipulation\highest_set_bit.py,1,28,"def get_highest_set_bit_position(number: int) -> int:
+    """"""
+    Returns position of the highest set bit of a number.
+    Ref - https://graphics.stanford.edu/~seander/bithacks.html#IntegerLogObvious
+    >>> get_highest_set_bit_position(25)
+    5
+    >>> get_highest_set_bit_position(37)
+    6
+    >>> get_highest_set_bit_position(1)
+    1
+    >>> get_highest_set_bit_position(4)
+    3
+    >>> get_highest_set_bit_position(0)
+    0
+    >>> get_highest_set_bit_position(0.8)
+    Traceback (most recent call last):
+        ...
+    TypeError: Input value must be an 'int' type
+    """"""
+    if not isinstance(number, int):
+        raise TypeError(""Input value must be an 'int' type"")
+
+    position = 0
+    while number:
+        position += 1
+        number >>= 1
+
+    return position",3,A,baixa,28,26
+find_missing_number,bit_manipulation\missing_number.py,1,34,"def find_missing_number(nums: list[int]) -> int:
+    """"""
+    Finds the missing number in a list of consecutive integers.
+
+    Args:
+        nums: A list of integers.
+
+    Returns:
+        The missing number.
+
+    Example:
+        >>> find_missing_number([0, 1, 3, 4])
+        2
+        >>> find_missing_number([4, 3, 1, 0])
+        2
+        >>> find_missing_number([-4, -3, -1, 0])
+        -2
+        >>> find_missing_number([-2, 2, 1, 3, 0])
+        -1
+        >>> find_missing_number([1, 3, 4, 5, 6])
+        2
+        >>> find_missing_number([6, 5, 4, 2, 1])
+        3
+        >>> find_missing_number([6, 1, 5, 3, 4])
+        2
+    """"""
+    low = min(nums)
+    high = max(nums)
+    missing_number = high
+
+    for i in range(low, high):
+        missing_number ^= i ^ nums[i - low]
+
+    return missing_number",2,A,baixa,34,29
+convert_speed,conversions\speed_conversions.py,25,65,"def convert_speed(speed: float, unit_from: str, unit_to: str) -> float:
+    """"""
+    Convert speed from one unit to another using the speed_chart above.
+
+    ""km/h"": 1.0,
+    ""m/s"": 3.6,
+    ""mph"": 1.609344,
+    ""knot"": 1.852,
+
+    >>> convert_speed(100, ""km/h"", ""m/s"")
+    27.778
+    >>> convert_speed(100, ""km/h"", ""mph"")
+    62.137
+    >>> convert_speed(100, ""km/h"", ""knot"")
+    53.996
+    >>> convert_speed(100, ""m/s"", ""km/h"")
+    360.0
+    >>> convert_speed(100, ""m/s"", ""mph"")
+    223.694
+    >>> convert_speed(100, ""m/s"", ""knot"")
+    194.384
+    >>> convert_speed(100, ""mph"", ""km/h"")
+    160.934
+    >>> convert_speed(100, ""mph"", ""m/s"")
+    44.704
+    >>> convert_speed(100, ""mph"", ""knot"")
+    86.898
+    >>> convert_speed(100, ""knot"", ""km/h"")
+    185.2
+    >>> convert_speed(100, ""knot"", ""m/s"")
+    51.444
+    >>> convert_speed(100, ""knot"", ""mph"")
+    115.078
+    """"""
+    if unit_to not in speed_chart or unit_from not in speed_chart_inverse:
+        msg = (
+            f""Incorrect 'from_type' or 'to_type' value: {unit_from!r}, {unit_to!r}\n""
+            f""Valid values are: {', '.join(speed_chart_inverse)}""
+        )
+        raise ValueError(msg)
+    return round(speed * speed_chart[unit_from] * speed_chart_inverse[unit_to], 3)",3,A,baixa,41,39
+left_rotation,data_structures\binary_tree\avl_tree.py,110,123,"def left_rotation(node: MyNode) -> MyNode:
+    """"""
+    a mirror symmetry rotation of the left_rotation
+    """"""
+    print(""right rotation node:"", node.get_data())
+    ret = node.get_right()
+    assert ret is not None
+    node.set_right(ret.get_left())
+    ret.set_left(node)
+    h1 = my_max(get_height(node.get_right()), get_height(node.get_left())) + 1
+    node.set_height(h1)
+    h2 = my_max(get_height(ret.get_right()), get_height(ret.get_left())) + 1
+    ret.set_height(h2)
+    return ret",2,A,baixa,14,14
+get_nodes_from_right_to_left,data_structures\binary_tree\binary_tree_traversals.py,141,160,"def get_nodes_from_right_to_left(root: Node | None, level: int) -> Generator[int]:
+    """"""
+    Returns a list of nodes value from a particular level:
+    Right to left direction of the binary tree.
+    >>> list(get_nodes_from_right_to_left(make_tree(), 1))
+    [1]
+    >>> list(get_nodes_from_right_to_left(make_tree(), 2))
+    [3, 2]
+    """"""
+
+    def populate_output(root: Node | None, level: int) -> Generator[int]:
+        if not root:
+            return
+        if level == 1:
+            yield root.data
+        elif level > 1:
+            yield from populate_output(root.right, level - 1)
+            yield from populate_output(root.left, level - 1)
+
+    yield from populate_output(root, level)",1,A,baixa,20,18
+binomial_coefficient,data_structures\binary_tree\number_of_possible_binary_trees.py,20,39,"def binomial_coefficient(n: int, k: int) -> int:
+    """"""
+    Since Here we Find the Binomial Coefficient:
+    https://en.wikipedia.org/wiki/Binomial_coefficient
+    C(n,k) = n! / k!(n-k)!
+    :param n: 2 times of Number of nodes
+    :param k: Number of nodes
+    :return:  Integer Value
+
+    >>> binomial_coefficient(4, 2)
+    6
+    """"""
+    result = 1  # To kept the Calculated Value
+    # Since C(n, k) = C(n, n-k)
+    k = min(k, n - k)
+    # Calculate C(n,k)
+    for i in range(k):
+        result *= n - i
+        result //= i + 1
+    return result",2,A,baixa,20,17
+evaluate,data_structures\stacks\prefix_evaluation.py,26,55,"def evaluate(expression):
+    """"""
+    Evaluate a given expression in prefix notation.
+    Asserts that the given expression is valid.
+
+    >>> evaluate(""+ 9 * 2 6"")
+    21
+    >>> evaluate(""/ * 10 2 + 4 1 "")
+    4.0
+    >>> evaluate(""2"")
+    2
+    >>> evaluate(""+ * 2 3 / 8 4"")
+    8.0
+    """"""
+    stack = []
+
+    # iterate over the string in reverse order
+    for c in expression.split()[::-1]:
+        # push operand to stack
+        if is_operand(c):
+            stack.append(int(c))
+
+        else:
+            # pop values from stack can calculate the result
+            # push the result onto the stack again
+            o1 = stack.pop()
+            o2 = stack.pop()
+            stack.append(operators[c](o1, o2))
+
+    return stack.pop()",3,A,baixa,30,22
+convex_hull_recursive,divide_and_conquer\convex_hull.py,295,362,"def convex_hull_recursive(points: list[Point]) -> list[Point]:
+    """"""
+    Constructs the convex hull of a set of 2D points using a divide-and-conquer strategy
+    The algorithm exploits the geometric properties of the problem by repeatedly
+    partitioning the set of points into smaller hulls, and finding the convex hull of
+    these smaller hulls.  The union of the convex hull from smaller hulls is the
+    solution to the convex hull of the larger problem.
+
+    Parameter
+    ---------
+    points: array-like of object of Points, lists or tuples.
+    The set of  2d points for which the convex-hull is needed
+
+    Runtime: O(n log n)
+
+    Returns
+    -------
+    convex_set: list, the convex-hull of points sorted in non-decreasing order.
+
+    Examples
+    ---------
+    >>> convex_hull_recursive([[0, 0], [1, 0], [10, 1]])
+    [(0.0, 0.0), (1.0, 0.0), (10.0, 1.0)]
+    >>> convex_hull_recursive([[0, 0], [1, 0], [10, 0]])
+    [(0.0, 0.0), (10.0, 0.0)]
+    >>> convex_hull_recursive([[-1, 1],[-1, -1], [0, 0], [0.5, 0.5], [1, -1], [1, 1],
+    ...                        [-0.75, 1]])
+    [(-1.0, -1.0), (-1.0, 1.0), (1.0, -1.0), (1.0, 1.0)]
+    >>> convex_hull_recursive([(0, 3), (2, 2), (1, 1), (2, 1), (3, 0), (0, 0), (3, 3),
+    ...                        (2, -1), (2, -4), (1, -3)])
+    [(0.0, 0.0), (0.0, 3.0), (1.0, -3.0), (2.0, -4.0), (3.0, 0.0), (3.0, 3.0)]
+
+    """"""
+    points = sorted(_validate_input(points))
+    n = len(points)
+
+    # divide all the points into an upper hull and a lower hull
+    # the left most point and the right most point are definitely
+    # members of the convex hull by definition.
+    # use these two anchors to divide all the points into two hulls,
+    # an upper hull and a lower hull.
+
+    # all points to the left (above) the line joining the extreme points belong to the
+    # upper hull
+    # all points to the right (below) the line joining the extreme points below to the
+    # lower hull
+    # ignore all points on the line joining the extreme points since they cannot be
+    # part of the convex hull
+
+    left_most_point = points[0]
+    right_most_point = points[n - 1]
+
+    convex_set = {left_most_point, right_most_point}
+    upper_hull = []
+    lower_hull = []
+
+    for i in range(1, n - 1):
+        det = _det(left_most_point, right_most_point, points[i])
+
+        if det > 0:
+            upper_hull.append(points[i])
+        elif det < 0:
+            lower_hull.append(points[i])
+
+    _construct_hull(upper_hull, left_most_point, right_most_point, convex_set)
+    _construct_hull(lower_hull, right_most_point, left_most_point, convex_set)
+
+    return sorted(convex_set)",4,A,baixa,68,44
+maximum_non_adjacent_sum,dynamic_programming\max_non_adjacent_sum.py,6,28,"def maximum_non_adjacent_sum(nums: list[int]) -> int:
+    """"""
+    Find the maximum non-adjacent sum of the integers in the nums input list
+
+    >>> maximum_non_adjacent_sum([1, 2, 3])
+    4
+    >>> maximum_non_adjacent_sum([1, 5, 3, 7, 2, 2, 6])
+    18
+    >>> maximum_non_adjacent_sum([-1, -5, -3, -7, -2, -2, -6])
+    0
+    >>> maximum_non_adjacent_sum([499, 500, -3, -7, -2, -2, -6])
+    500
+    """"""
+    if not nums:
+        return 0
+    max_including = nums[0]
+    max_excluding = 0
+    for num in nums[1:]:
+        max_including, max_excluding = (
+            max_excluding + num,
+            max(max_including, max_excluding),
+        )
+    return max(max_excluding, max_including)",3,A,baixa,23,22
+calculate_probabilities,machine_learning\linear_discriminant_analysis.py,110,123,"def calculate_probabilities(instance_count: int, total_count: int) -> float:
+    """"""
+    Calculate the probability that a given instance will belong to which class
+    :param instance_count: number of instances in class
+    :param total_count: the number of all instances
+    :return: value of probability for considered class
+
+    >>> calculate_probabilities(20, 60)
+    0.3333333333333333
+    >>> calculate_probabilities(30, 100)
+    0.3
+    """"""
+    # number of instances in specific class divided by number of all instances
+    return instance_count / total_count",1,A,baixa,14,12
+median,maths\average_median.py,4,31,"def median(nums: list) -> int | float:
+    """"""
+    Find median of a list of numbers.
+    Wiki: https://en.wikipedia.org/wiki/Median
+
+    >>> median([0])
+    0
+    >>> median([4, 1, 3, 2])
+    2.5
+    >>> median([2, 70, 6, 50, 20, 8, 4])
+    8
+
+    Args:
+        nums: List of nums
+
+    Returns:
+        Median.
+    """"""
+    # The sorted function returns list[SupportsRichComparisonT@sorted]
+    # which does not support `+`
+    sorted_list: list[int] = sorted(nums)
+    length = len(sorted_list)
+    mid_index = length >> 1
+    return (
+        (sorted_list[mid_index] + sorted_list[mid_index - 1]) / 2
+        if length % 2 == 0
+        else sorted_list[mid_index]
+    )",2,A,baixa,28,23
+binary_exponentiation,maths\fermat_little_theorem.py,8,17,"def binary_exponentiation(a: int, n: float, mod: int) -> int:
+    if n == 0:
+        return 1
+
+    elif n % 2 == 1:
+        return (binary_exponentiation(a, n - 1, mod) * a) % mod
+
+    else:
+        b = binary_exponentiation(a, n / 2, mod)
+        return (b * b) % mod",3,A,baixa,10,8
+max_sum_in_array,maths\max_sum_sliding_window.py,13,36,"def max_sum_in_array(array: list[int], k: int) -> int:
+    """"""
+    Returns the maximum sum of k consecutive elements
+    >>> arr = [1, 4, 2, 10, 2, 3, 1, 0, 20]
+    >>> k = 4
+    >>> max_sum_in_array(arr, k)
+    24
+    >>> k = 10
+    >>> max_sum_in_array(arr,k)
+    Traceback (most recent call last):
+        ...
+    ValueError: Invalid Input
+    >>> arr = [1, 4, 2, 10, 2, 13, 1, 0, 2]
+    >>> k = 4
+    >>> max_sum_in_array(arr, k)
+    27
+    """"""
+    if len(array) < k or k < 0:
+        raise ValueError(""Invalid Input"")
+    max_sum = current_sum = sum(array[:k])
+    for i in range(len(array) - k):
+        current_sum = current_sum - array[i] + array[i + k]
+        max_sum = max(max_sum, current_sum)
+    return max_sum",4,A,baixa,24,24
+minkowski_distance,maths\minkowski_distance.py,1,39,"def minkowski_distance(
+    point_a: list[float],
+    point_b: list[float],
+    order: int,
+) -> float:
+    """"""
+    This function calculates the Minkowski distance for a given order between
+    two n-dimensional points represented as lists. For the case of order = 1,
+    the Minkowski distance degenerates to the Manhattan distance. For
+    order = 2, the usual Euclidean distance is obtained.
+
+    https://en.wikipedia.org/wiki/Minkowski_distance
+
+    Note: due to floating point calculation errors the output of this
+    function may be inaccurate.
+
+    >>> minkowski_distance([1.0, 1.0], [2.0, 2.0], 1)
+    2.0
+    >>> minkowski_distance([1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0], 2)
+    8.0
+    >>> import numpy as np
+    >>> bool(np.isclose(5.0, minkowski_distance([5.0], [0.0], 3)))
+    True
+    >>> minkowski_distance([1.0], [2.0], -1)
+    Traceback (most recent call last):
+        ...
+    ValueError: The order must be greater than or equal to 1.
+    >>> minkowski_distance([1.0], [1.0, 2.0], 1)
+    Traceback (most recent call last):
+        ...
+    ValueError: Both points must have the same dimension.
+    """"""
+    if order < 1:
+        raise ValueError(""The order must be greater than or equal to 1."")
+
+    if len(point_a) != len(point_b):
+        raise ValueError(""Both points must have the same dimension."")
+
+    return sum(abs(a - b) ** order for a, b in zip(point_a, point_b)) ** (1 / order)",4,A,baixa,39,34
+mobius,maths\mobius_function.py,12,37,"def mobius(n: int) -> int:
+    """"""
+    Mobius function
+    >>> mobius(24)
+    0
+    >>> mobius(-1)
+    1
+    >>> mobius('asd')
+    Traceback (most recent call last):
+        ...
+    TypeError: '<=' not supported between instances of 'int' and 'str'
+    >>> mobius(10**400)
+    0
+    >>> mobius(10**-400)
+    1
+    >>> mobius(-1424)
+    1
+    >>> mobius([1, '2', 2.0])
+    Traceback (most recent call last):
+        ...
+    TypeError: '<=' not supported between instances of 'int' and 'list'
+    """"""
+    factors = prime_factors(n)
+    if is_square_free(factors):
+        return -1 if len(factors) % 2 else 1
+    return 0",3,A,baixa,26,26
+ucal,maths\numerical_analysis\newton_forward_interpolation.py,8,20,"def ucal(u: float, p: int) -> float:
+    """"""
+    >>> ucal(1, 2)
+    0
+    >>> ucal(1.1, 2)
+    0.11000000000000011
+    >>> ucal(1.2, 2)
+    0.23999999999999994
+    """"""
+    temp = u
+    for i in range(1, p):
+        temp = temp * (u - i)
+    return temp",2,A,baixa,13,13
+sock_merchant,maths\sock_merchant.py,4,11,"def sock_merchant(colors: list[int]) -> int:
+    """"""
+    >>> sock_merchant([10, 20, 20, 10, 10, 30, 50, 10, 20])
+    3
+    >>> sock_merchant([1, 1, 3, 3])
+    2
+    """"""
+    return sum(socks_by_color // 2 for socks_by_color in Counter(colors).values())",2,A,baixa,8,8
+wave,strings\wave_string.py,1,16,"def wave(txt: str) -> list:
+    """"""
+    Returns a so called 'wave' of a given string
+    >>> wave('cat')
+    ['Cat', 'cAt', 'caT']
+    >>> wave('one')
+    ['One', 'oNe', 'onE']
+    >>> wave('book')
+    ['Book', 'bOok', 'boOk', 'booK']
+    """"""
+
+    return [
+        txt[:a] + txt[a].upper() + txt[a + 1 :]
+        for a in range(len(txt))
+        if txt[a].isalpha()
+    ]",3,A,baixa,16,15
+is_safe,backtracking\sudoku.py,44,60,"def is_safe(grid: Matrix, row: int, column: int, n: int) -> bool:
+    """"""
+    This function checks the grid to see if each row,
+    column, and the 3x3 subgrids contain the digit 'n'.
+    It returns False if it is not 'safe' (a duplicate digit
+    is found) else returns True if it is 'safe'
+    """"""
+    for i in range(9):
+        if n in {grid[row][i], grid[i][column]}:
+            return False
+
+    for i in range(3):
+        for j in range(3):
+            if grid[(row - row % 3) + i][(column - column % 3) + j] == n:
+                return False
+
+    return True",6,B,media,17,15
+find_previous_power_of_two,bit_manipulation\find_previous_power_of_two.py,1,24,"def find_previous_power_of_two(number: int) -> int:
+    """"""
+    Find the largest power of two that is less than or equal to a given integer.
+    https://stackoverflow.com/questions/1322510
+
+    >>> [find_previous_power_of_two(i) for i in range(18)]
+    [0, 1, 2, 2, 4, 4, 4, 4, 8, 8, 8, 8, 8, 8, 8, 8, 16, 16]
+    >>> find_previous_power_of_two(-5)
+    Traceback (most recent call last):
+        ...
+    ValueError: Input must be a non-negative integer
+    >>> find_previous_power_of_two(10.5)
+    Traceback (most recent call last):
+        ...
+    ValueError: Input must be a non-negative integer
+    """"""
+    if not isinstance(number, int) or number < 0:
+        raise ValueError(""Input must be a non-negative integer"")
+    if number == 0:
+        return 0
+    power = 1
+    while power <= number:
+        power <<= 1  # Equivalent to multiplying by 2
+    return power >> 1 if number > 1 else 1",6,B,media,24,23
+next_greatest_element,data_structures\stacks\next_greater_element.py,71,106,"def next_greatest_element(arr: list[float]) -> list[float]:
+    """"""
+    Efficient solution to find the Next Greatest Element (NGE) for all elements
+    using a stack. The time complexity is reduced to O(n), making it suitable
+    for larger arrays.
+
+    The stack keeps track of elements for which the next greater element hasn't
+    been found yet. By iterating through the array in reverse (from the last
+    element to the first), the stack is used to efficiently determine the next
+    greatest element for each element.
+
+    Args:
+        arr: List of numbers for which the NGE is calculated.
+
+    Returns:
+        List containing the next greatest elements. If no
+        greater element is found, -1 is placed in the result.
+
+    Example:
+    >>> next_greatest_element(arr) == expect
+    True
+    """"""
+    arr_size = len(arr)
+    stack: list[float] = []
+    result: list[float] = [-1] * arr_size
+
+    for index in reversed(range(arr_size)):
+        if stack:
+            while stack[-1] <= arr[index]:
+                stack.pop()
+                if not stack:
+                    break
+        if stack:
+            result[index] = stack[-1]
+        stack.append(arr[index])
+    return result",6,B,media,36,31
+kth_number,divide_and_conquer\kth_order_statistic.py,26,60,"def kth_number(lst: list[int], k: int) -> int:
+    """"""
+    Return the kth smallest number in lst.
+    >>> kth_number([2, 1, 3, 4, 5], 3)
+    3
+    >>> kth_number([2, 1, 3, 4, 5], 1)
+    1
+    >>> kth_number([2, 1, 3, 4, 5], 5)
+    5
+    >>> kth_number([3, 2, 5, 6, 7, 8], 2)
+    3
+    >>> kth_number([25, 21, 98, 100, 76, 22, 43, 60, 89, 87], 4)
+    43
+    """"""
+    # pick a pivot and separate into list based on pivot.
+    pivot = random_pivot(lst)
+
+    # partition based on pivot
+    # linear time
+    small = [e for e in lst if e < pivot]
+    big = [e for e in lst if e > pivot]
+
+    # if we get lucky, pivot might be the element we want.
+    # we can easily see this:
+    # small (elements smaller than k)
+    # + pivot (kth element)
+    # + big (elements larger than k)
+    if len(small) == k - 1:
+        return pivot
+    # pivot is in elements bigger than k
+    elif len(small) < k - 1:
+        return kth_number(big, k - len(small) - 1)
+    # pivot is in elements smaller than k
+    else:
+        return kth_number(small, k)",7,B,media,35,23
+longest_subsequence,dynamic_programming\longest_increasing_subsequence.py,19,61,"def longest_subsequence(array: list[int]) -> list[int]:  # This function is recursive
+    """"""
+    Some examples
+
+    >>> longest_subsequence([10, 22, 9, 33, 21, 50, 41, 60, 80])
+    [10, 22, 33, 41, 60, 80]
+    >>> longest_subsequence([4, 8, 7, 5, 1, 12, 2, 3, 9])
+    [1, 2, 3, 9]
+    >>> longest_subsequence([28, 26, 12, 23, 35, 39])
+    [12, 23, 35, 39]
+    >>> longest_subsequence([9, 8, 7, 6, 5, 7])
+    [5, 7]
+    >>> longest_subsequence([1, 1, 1])
+    [1, 1, 1]
+    >>> longest_subsequence([])
+    []
+    """"""
+    array_length = len(array)
+    # If the array contains only one element, we return it (it's the stop condition of
+    # recursion)
+    if array_length <= 1:
+        return array
+        # Else
+    pivot = array[0]
+    is_found = False
+    i = 1
+    longest_subseq: list[int] = []
+    while not is_found and i < array_length:
+        if array[i] < pivot:
+            is_found = True
+            temp_array = array[i:]
+            temp_array = longest_subsequence(temp_array)
+            if len(temp_array) > len(longest_subseq):
+                longest_subseq = temp_array
+        else:
+            i += 1
+
+    temp_array = [element for element in array[1:] if element >= pivot]
+    temp_array = [pivot, *longest_subsequence(temp_array)]
+    if len(temp_array) > len(longest_subseq):
+        return temp_array
+    else:
+        return longest_subseq",9,B,media,43,38
+carrier_concentration,electronics\carrier_concentration.py,8,69,"def carrier_concentration(
+    electron_conc: float,
+    hole_conc: float,
+    intrinsic_conc: float,
+) -> tuple:
+    """"""
+    This function can calculate any one of the three -
+    1. Electron Concentration
+    2, Hole Concentration
+    3. Intrinsic Concentration
+    given the other two.
+    Examples -
+    >>> carrier_concentration(electron_conc=25, hole_conc=100, intrinsic_conc=0)
+    ('intrinsic_conc', 50.0)
+    >>> carrier_concentration(electron_conc=0, hole_conc=1600, intrinsic_conc=200)
+    ('electron_conc', 25.0)
+    >>> carrier_concentration(electron_conc=1000, hole_conc=0, intrinsic_conc=1200)
+    ('hole_conc', 1440.0)
+    >>> carrier_concentration(electron_conc=1000, hole_conc=400, intrinsic_conc=1200)
+    Traceback (most recent call last):
+        ...
+    ValueError: You cannot supply more or less than 2 values
+    >>> carrier_concentration(electron_conc=-1000, hole_conc=0, intrinsic_conc=1200)
+    Traceback (most recent call last):
+        ...
+    ValueError: Electron concentration cannot be negative in a semiconductor
+    >>> carrier_concentration(electron_conc=0, hole_conc=-400, intrinsic_conc=1200)
+    Traceback (most recent call last):
+        ...
+    ValueError: Hole concentration cannot be negative in a semiconductor
+    >>> carrier_concentration(electron_conc=0, hole_conc=400, intrinsic_conc=-1200)
+    Traceback (most recent call last):
+        ...
+    ValueError: Intrinsic concentration cannot be negative in a semiconductor
+    """"""
+    if (electron_conc, hole_conc, intrinsic_conc).count(0) != 1:
+        raise ValueError(""You cannot supply more or less than 2 values"")
+    elif electron_conc < 0:
+        raise ValueError(""Electron concentration cannot be negative in a semiconductor"")
+    elif hole_conc < 0:
+        raise ValueError(""Hole concentration cannot be negative in a semiconductor"")
+    elif intrinsic_conc < 0:
+        raise ValueError(
+            ""Intrinsic concentration cannot be negative in a semiconductor""
+        )
+    elif electron_conc == 0:
+        return (
+            ""electron_conc"",
+            intrinsic_conc**2 / hole_conc,
+        )
+    elif hole_conc == 0:
+        return (
+            ""hole_conc"",
+            intrinsic_conc**2 / electron_conc,
+        )
+    elif intrinsic_conc == 0:
+        return (
+            ""intrinsic_conc"",
+            (electron_conc * hole_conc) ** 0.5,
+        )
+    else:
+        return (-1, -1)",8,B,media,62,62
+floy,graphs\basic_graphs.py,259,269,"def floy(a_and_n):
+    (a, n) = a_and_n
+    dist = list(a)
+    path = [[0] * n for i in range(n)]
+    for k in range(n):
+        for i in range(n):
+            for j in range(n):
+                if dist[i][j] > dist[i][k] + dist[k][j]:
+                    dist[i][j] = dist[i][k] + dist[k][j]
+                    path[i][k] = k
+    print(dist)",6,B,media,11,11
+page_rank,graphs\page_rank.py,34,49,"def page_rank(nodes, limit=3, d=0.85):
+    ranks = {}
+    for node in nodes:
+        ranks[node.name] = 1
+
+    outbounds = {}
+    for node in nodes:
+        outbounds[node.name] = len(node.outbound)
+
+    for i in range(limit):
+        print(f""======= Iteration {i + 1} ======="")
+        for _, node in enumerate(nodes):
+            ranks[node.name] = (1 - d) + d * sum(
+                ranks[ib] / outbounds[ib] for ib in node.inbound
+            )
+        print(ranks)",6,B,media,16,14
+can_complete_journey,greedy_methods\gas_station.py,62,92,"def can_complete_journey(gas_stations: tuple[GasStation, ...]) -> int:
+    """"""
+    This function returns the index from which to start the journey
+    in order to reach the end.
+
+    Args:
+        gas_quantities [list]: Amount of gas available at each station
+        cost [list]: The cost of gas required to move from one station to the next
+
+    Returns:
+        start [int]: start index needed to complete the journey
+
+    Examples:
+    >>> can_complete_journey(get_gas_stations([1, 2, 3, 4, 5], [3, 4, 5, 1, 2]))
+    3
+    >>> can_complete_journey(get_gas_stations([2, 3, 4], [3, 4, 3]))
+    -1
+    """"""
+    total_gas = sum(gas_station.gas_quantity for gas_station in gas_stations)
+    total_cost = sum(gas_station.cost for gas_station in gas_stations)
+    if total_gas < total_cost:
+        return -1
+
+    start = 0
+    net = 0
+    for i, gas_station in enumerate(gas_stations):
+        net += gas_station.gas_quantity - gas_station.cost
+        if net < 0:
+            start = i + 1
+            net = 0
+    return start",6,B,media,31,27
+area_triangle_three_sides,maths\area.py,315,360,"def area_triangle_three_sides(side1: float, side2: float, side3: float) -> float:
+    """"""
+    Calculate area of triangle when the length of 3 sides are known.
+    This function uses Heron's formula: https://en.wikipedia.org/wiki/Heron%27s_formula
+
+    >>> area_triangle_three_sides(5, 12, 13)
+    30.0
+    >>> area_triangle_three_sides(10, 11, 12)
+    51.521233486786784
+    >>> area_triangle_three_sides(0, 0, 0)
+    0.0
+    >>> area_triangle_three_sides(1.6, 2.6, 3.6)
+    1.8703742940919619
+    >>> area_triangle_three_sides(-1, -2, -1)
+    Traceback (most recent call last):
+        ...
+    ValueError: area_triangle_three_sides() only accepts non-negative values
+    >>> area_triangle_three_sides(1, -2, 1)
+    Traceback (most recent call last):
+        ...
+    ValueError: area_triangle_three_sides() only accepts non-negative values
+    >>> area_triangle_three_sides(2, 4, 7)
+    Traceback (most recent call last):
+        ...
+    ValueError: Given three sides do not form a triangle
+    >>> area_triangle_three_sides(2, 7, 4)
+    Traceback (most recent call last):
+        ...
+    ValueError: Given three sides do not form a triangle
+    >>> area_triangle_three_sides(7, 2, 4)
+    Traceback (most recent call last):
+        ...
+    ValueError: Given three sides do not form a triangle
+    """"""
+    if side1 < 0 or side2 < 0 or side3 < 0:
+        raise ValueError(""area_triangle_three_sides() only accepts non-negative values"")
+    elif side1 + side2 < side3 or side1 + side3 < side2 or side2 + side3 < side1:
+        raise ValueError(""Given three sides do not form a triangle"")
+    semi_perimeter = (side1 + side2 + side3) / 2
+    area = sqrt(
+        semi_perimeter
+        * (semi_perimeter - side1)
+        * (semi_perimeter - side2)
+        * (semi_perimeter - side3)
+    )
+    return area",7,B,media,46,45
+simpson_integration,maths\numerical_analysis\integration_by_simpson_approx.py,37,115,"def simpson_integration(function, a: float, b: float, precision: int = 4) -> float:
+    """"""
+    Args:
+        function : the function which's integration is desired
+        a : the lower limit of integration
+        b : upper limit of integration
+        precision : precision of the result,error required default is 4
+
+    Returns:
+        result : the value of the approximated integration of function in range a to b
+
+    Raises:
+        AssertionError: function is not callable
+        AssertionError: a is not float or integer
+        AssertionError: function should return float or integer
+        AssertionError: b is not float or integer
+        AssertionError: precision is not positive integer
+
+    >>> simpson_integration(lambda x : x*x,1,2,3)
+    2.333
+
+    >>> simpson_integration(lambda x : x*x,'wrong_input',2,3)
+    Traceback (most recent call last):
+        ...
+    AssertionError: a should be float or integer your input : wrong_input
+
+    >>> simpson_integration(lambda x : x*x,1,'wrong_input',3)
+    Traceback (most recent call last):
+        ...
+    AssertionError: b should be float or integer your input : wrong_input
+
+    >>> simpson_integration(lambda x : x*x,1,2,'wrong_input')
+    Traceback (most recent call last):
+        ...
+    AssertionError: precision should be positive integer your input : wrong_input
+    >>> simpson_integration('wrong_input',2,3,4)
+    Traceback (most recent call last):
+        ...
+    AssertionError: the function(object) passed should be callable your input : ...
+
+    >>> simpson_integration(lambda x : x*x,3.45,3.2,1)
+    -2.8
+
+    >>> simpson_integration(lambda x : x*x,3.45,3.2,0)
+    Traceback (most recent call last):
+        ...
+    AssertionError: precision should be positive integer your input : 0
+
+    >>> simpson_integration(lambda x : x*x,3.45,3.2,-1)
+    Traceback (most recent call last):
+        ...
+    AssertionError: precision should be positive integer your input : -1
+
+    """"""
+    assert callable(function), (
+        f""the function(object) passed should be callable your input : {function}""
+    )
+    assert isinstance(a, (float, int)), f""a should be float or integer your input : {a}""
+    assert isinstance(function(a), (float, int)), (
+        ""the function should return integer or float return type of your function, ""
+        f""{type(a)}""
+    )
+    assert isinstance(b, (float, int)), f""b should be float or integer your input : {b}""
+    assert isinstance(precision, int) and precision > 0, (
+        f""precision should be positive integer your input : {precision}""
+    )
+
+    # just applying the formula of simpson for approximate integration written in
+    # mentioned article in first comment of this file and above this function
+
+    h = (b - a) / N_STEPS
+    result = function(a) + function(b)
+
+    for i in range(1, N_STEPS):
+        a1 = a + h * i
+        result += function(a1) * (4 if i % 2 else 2)
+
+    result *= h / 3
+    return round(result, precision)",8,B,media,79,63
+generate_pascal_triangle_optimized,matrix\pascal_triangle.py,111,163,"def generate_pascal_triangle_optimized(num_rows: int) -> list[list[int]]:
+    """"""
+    This function returns a matrix representing the corresponding pascal's triangle
+    according to the given input of number of rows of Pascal's triangle to be generated.
+    It reduces the operations done to generate a row by half
+    by eliminating redundant calculations.
+
+    :param num_rows: Integer specifying the number of rows in the Pascal's triangle
+    :return: 2-D List (matrix) representing the Pascal's triangle
+
+    Return the Pascal's triangle of given rows
+    >>> generate_pascal_triangle_optimized(3)
+    [[1], [1, 1], [1, 2, 1]]
+    >>> generate_pascal_triangle_optimized(1)
+    [[1]]
+    >>> generate_pascal_triangle_optimized(0)
+    []
+    >>> generate_pascal_triangle_optimized(-5)
+    Traceback (most recent call last):
+        ...
+    ValueError: The input value of 'num_rows' should be greater than or equal to 0
+    >>> generate_pascal_triangle_optimized(7.89)
+    Traceback (most recent call last):
+        ...
+    TypeError: The input value of 'num_rows' should be 'int'
+    """"""
+
+    if not isinstance(num_rows, int):
+        raise TypeError(""The input value of 'num_rows' should be 'int'"")
+
+    if num_rows == 0:
+        return []
+    elif num_rows < 0:
+        raise ValueError(
+            ""The input value of 'num_rows' should be greater than or equal to 0""
+        )
+
+    result: list[list[int]] = [[1]]
+
+    for row_index in range(1, num_rows):
+        temp_row = [0] + result[-1] + [0]
+        row_length = row_index + 1
+        # Calculate the number of distinct elements in a row
+        distinct_elements = sum(divmod(row_length, 2))
+        row_first_half = [
+            temp_row[i - 1] + temp_row[i] for i in range(1, distinct_elements + 1)
+        ]
+        row_second_half = row_first_half[: (row_index + 1) // 2]
+        row_second_half.reverse()
+        row = row_first_half + row_second_half
+        result.append(row)
+
+    return result",6,B,media,53,45
+majority_vote,other\majority_vote_algorithm.py,11,32,"def majority_vote(votes: list[int], votes_needed_to_win: int) -> list[int]:
+    """"""
+    >>> majority_vote([1, 2, 2, 3, 1, 3, 2], 3)
+    [2]
+    >>> majority_vote([1, 2, 2, 3, 1, 3, 2], 2)
+    []
+    >>> majority_vote([1, 2, 2, 3, 1, 3, 2], 4)
+    [1, 2, 3]
+    """"""
+    majority_candidate_counter: Counter[int] = Counter()
+    for vote in votes:
+        majority_candidate_counter[vote] += 1
+        if len(majority_candidate_counter) == votes_needed_to_win:
+            majority_candidate_counter -= Counter(set(majority_candidate_counter))
+    majority_candidate_counter = Counter(
+        vote for vote in votes if vote in majority_candidate_counter
+    )
+    return [
+        vote
+        for vote in majority_candidate_counter
+        if majority_candidate_counter[vote] > len(votes) / votes_needed_to_win
+    ]",7,B,media,22,22
+binary_search_by_recursion,searches\binary_search.py,320,357,"def binary_search_by_recursion(
+    sorted_collection: list[int], item: int, left: int = 0, right: int = -1
+) -> int:
+    """"""Pure implementation of a binary search algorithm in Python by recursion
+
+    Be careful collection must be ascending sorted otherwise, the result will be
+    unpredictable
+    First recursion should be started with left=0 and right=(len(sorted_collection)-1)
+
+    :param sorted_collection: some ascending sorted collection with comparable items
+    :param item: item value to search
+    :return: index of the found item or -1 if the item is not found
+
+    Examples:
+    >>> binary_search_by_recursion([0, 5, 7, 10, 15], 0, 0, 4)
+    0
+    >>> binary_search_by_recursion([0, 5, 7, 10, 15], 15, 0, 4)
+    4
+    >>> binary_search_by_recursion([0, 5, 7, 10, 15], 5, 0, 4)
+    1
+    >>> binary_search_by_recursion([0, 5, 7, 10, 15], 6, 0, 4)
+    -1
+    """"""
+    if right < 0:
+        right = len(sorted_collection) - 1
+    if list(sorted_collection) != sorted(sorted_collection):
+        raise ValueError(""sorted_collection must be sorted in ascending order"")
+    if right < left:
+        return -1
+
+    midpoint = left + (right - left) // 2
+
+    if sorted_collection[midpoint] == item:
+        return midpoint
+    elif sorted_collection[midpoint] > item:
+        return binary_search_by_recursion(sorted_collection, item, left, midpoint - 1)
+    else:
+        return binary_search_by_recursion(sorted_collection, item, midpoint + 1, right)",6,B,media,38,33
+dutch_national_flag_sort,sorts\dutch_national_flag_sort.py,33,88,"def dutch_national_flag_sort(sequence: list) -> list:
+    """"""
+    A pure Python implementation of Dutch National Flag sort algorithm.
+    :param data: 3 unique integer values (e.g., 0, 1, 2) in an sequence
+    :return: The same collection in ascending order
+
+    >>> dutch_national_flag_sort([])
+    []
+    >>> dutch_national_flag_sort([0])
+    [0]
+    >>> dutch_national_flag_sort([2, 1, 0, 0, 1, 2])
+    [0, 0, 1, 1, 2, 2]
+    >>> dutch_national_flag_sort([0, 1, 1, 0, 1, 2, 1, 2, 0, 0, 0, 1])
+    [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2]
+    >>> dutch_national_flag_sort(""abacab"")
+    Traceback (most recent call last):
+      ...
+    ValueError: The elements inside the sequence must contains only (0, 1, 2) values
+    >>> dutch_national_flag_sort(""Abacab"")
+    Traceback (most recent call last):
+      ...
+    ValueError: The elements inside the sequence must contains only (0, 1, 2) values
+    >>> dutch_national_flag_sort([3, 2, 3, 1, 3, 0, 3])
+    Traceback (most recent call last):
+      ...
+    ValueError: The elements inside the sequence must contains only (0, 1, 2) values
+    >>> dutch_national_flag_sort([-1, 2, -1, 1, -1, 0, -1])
+    Traceback (most recent call last):
+      ...
+    ValueError: The elements inside the sequence must contains only (0, 1, 2) values
+    >>> dutch_national_flag_sort([1.1, 2, 1.1, 1, 1.1, 0, 1.1])
+    Traceback (most recent call last):
+      ...
+    ValueError: The elements inside the sequence must contains only (0, 1, 2) values
+    """"""
+    if not sequence:
+        return []
+    if len(sequence) == 1:
+        return list(sequence)
+    low = 0
+    high = len(sequence) - 1
+    mid = 0
+    while mid <= high:
+        if sequence[mid] == colors[0]:
+            sequence[low], sequence[mid] = sequence[mid], sequence[low]
+            low += 1
+            mid += 1
+        elif sequence[mid] == colors[1]:
+            mid += 1
+        elif sequence[mid] == colors[2]:
+            sequence[mid], sequence[high] = sequence[high], sequence[mid]
+            high -= 1
+        else:
+            msg = f""The elements inside the sequence must contains only {colors} values""
+            raise ValueError(msg)
+    return sequence",7,B,media,56,55
+oe_process,sorts\odd_even_transposition_parallel.py,32,71,"def oe_process(
+    position,
+    value,
+    l_send,
+    r_send,
+    lr_cv,
+    rr_cv,
+    result_pipe,
+    multiprocessing_context,
+):
+    process_lock = multiprocessing_context.Lock()
+
+    # we perform n swaps since after n swaps we know we are sorted
+    # we *could* stop early if we are sorted already, but it takes as long to
+    # find out we are sorted as it does to sort the list with this algorithm
+    for i in range(10):
+        if (i + position) % 2 == 0 and r_send is not None:
+            # send your value to your right neighbor
+            with process_lock:
+                r_send[1].send(value)
+
+            # receive your right neighbor's value
+            with process_lock:
+                temp = rr_cv[0].recv()
+
+            # take the lower value since you are on the left
+            value = min(value, temp)
+        elif (i + position) % 2 != 0 and l_send is not None:
+            # send your value to your left neighbor
+            with process_lock:
+                l_send[1].send(value)
+
+            # receive your left neighbor's value
+            with process_lock:
+                temp = lr_cv[0].recv()
+
+            # take the higher value since you are on the right
+            value = max(value, temp)
+    # after all swaps are performed, send the values back to main
+    result_pipe[1].send(value)",6,B,media,40,25
+quick_sort,sorts\recursive_quick_sort.py,1,16,"def quick_sort(data: list) -> list:
+    """"""
+    >>> for data in ([2, 1, 0], [2.2, 1.1, 0], ""quick_sort""):
+    ...     quick_sort(data) == sorted(data)
+    True
+    True
+    True
+    """"""
+    if len(data) <= 1:
+        return data
+    else:
+        return [
+            *quick_sort([e for e in data[1:] if e <= data[0]]),
+            data[0],
+            *quick_sort([e for e in data[1:] if e > data[0]]),
+        ]",6,B,media,16,16
+search_anime_episode_list,web_programming\fetch_anime_and_play.py,72,122,"def search_anime_episode_list(episode_endpoint: str) -> list:
+    """"""[summary]
+
+    Take an url and
+    return list of episodes after scraping the site
+    for an url.
+
+    >>> type(search_anime_episode_list(""/anime/kimetsu-no-yaiba""))
+    <class 'list'>
+
+    Args:
+        episode_endpoint (str): [Endpoint of episode]
+
+    Raises:
+        e: [description]
+
+    Returns:
+        [list]: [List of episodes]
+    """"""
+
+    request_url = f""{BASE_URL}{episode_endpoint}""
+
+    response = httpx.get(
+        url=request_url, headers={""UserAgent"": UserAgent().chrome}, timeout=10
+    )
+    response.raise_for_status()
+
+    soup = BeautifulSoup(response.text, ""html.parser"")
+
+    # With this id. get the episode list.
+    episode_page_ul = soup.find(""ul"", {""id"": ""episode_related""})
+    if episode_page_ul is None or isinstance(episode_page_ul, NavigableString):
+        msg = f""Could not find any anime eposiodes with name {anime_name}""
+        raise ValueError(msg)
+    episode_page_li = episode_page_ul.children
+
+    episode_list = []
+    for episode in episode_page_li:
+        if isinstance(episode, Tag):
+            url = episode.find(""a"")
+            if url is None or isinstance(url, NavigableString):
+                continue
+            title = episode.find(""div"", {""class"": ""name""})
+            if title is None or isinstance(title, NavigableString):
+                continue
+
+            episode_list.append(
+                {""title"": title.text.replace("" "", """"), ""url"": url[""href""]}
+            )
+
+    return episode_list",9,B,media,51,38
+fetch_pharmacy_and_price_list,web_programming\fetch_well_rx_price.py,14,71,"def fetch_pharmacy_and_price_list(drug_name: str, zip_code: str) -> list | None:
+    """"""[summary]
+
+    This function will take input of drug name and zipcode,
+    then request to the BASE_URL site.
+    Get the page data and scrape it to generate the
+    list of the lowest prices for the prescription drug.
+
+    Args:
+        drug_name (str): [Drug name]
+        zip_code(str): [Zip code]
+
+    Returns:
+        list: [List of pharmacy name and price]
+
+    >>> print(fetch_pharmacy_and_price_list(None, None))
+    None
+    >>> print(fetch_pharmacy_and_price_list(None, 30303))
+    None
+    >>> print(fetch_pharmacy_and_price_list(""eliquis"", None))
+    None
+    """"""
+
+    try:
+        # Has user provided both inputs?
+        if not drug_name or not zip_code:
+            return None
+
+        request_url = BASE_URL.format(drug_name, zip_code)
+        response = httpx.get(request_url, timeout=10).raise_for_status()
+
+        # Scrape the data using bs4
+        soup = BeautifulSoup(response.text, ""html.parser"")
+
+        # This list will store the name and price.
+        pharmacy_price_list = []
+
+        # Fetch all the grids that contain the items.
+        grid_list = soup.find_all(""div"", {""class"": ""grid-x pharmCard""})
+        if grid_list and len(grid_list) > 0:
+            for grid in grid_list:
+                # Get the pharmacy price.
+                pharmacy_name = grid.find(""p"", {""class"": ""list-title""}).text
+
+                # Get the price of the drug.
+                price = grid.find(""span"", {""p"", ""price price-large""}).text
+
+                pharmacy_price_list.append(
+                    {
+                        ""pharmacy_name"": pharmacy_name,
+                        ""price"": price,
+                    }
+                )
+
+        return pharmacy_price_list
+
+    except httpx.HTTPError, ValueError:
+        return None",7,B,media,58,39
+get_subreddit_data,web_programming\reddit.py,25,56,"def get_subreddit_data(
+    subreddit: str, limit: int = 1, age: str = ""new"", wanted_data: list | None = None
+) -> dict:
+    """"""
+    subreddit : Subreddit to query
+    limit : Number of posts to fetch
+    age : [""new"", ""top"", ""hot""]
+    wanted_data : Get only the required data in the list
+    """"""
+    wanted_data = wanted_data or []
+    if invalid_search_terms := "", "".join(sorted(set(wanted_data) - valid_terms)):
+        msg = f""Invalid search term: {invalid_search_terms}""
+        raise ValueError(msg)
+    response = httpx.get(
+        f""https://www.reddit.com/r/{subreddit}/{age}.json?limit={limit}"",
+        headers={""User-agent"": ""A random string""},
+        timeout=10,
+    )
+    response.raise_for_status()
+    if response.status_code == 429:
+        raise httpx.HTTPError(response=response)
+
+    data = response.json()
+    if not wanted_data:
+        return {id_: data[""data""][""children""][id_] for id_ in range(limit)}
+
+    data_dict = {}
+    for id_ in range(limit):
+        data_dict[id_] = {
+            item: data[""data""][""children""][id_][""data""][item] for item in wanted_data
+        }
+    return data_dict",8,B,media,32,30

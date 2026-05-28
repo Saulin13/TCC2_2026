@@ -4,6 +4,7 @@ Avalia testes gerados com Claude (Anthropic), alinhado à amostra já avaliada p
 
 from __future__ import annotations
 
+import argparse
 import ast
 import json
 import math
@@ -16,22 +17,23 @@ import pandas as pd
 from anthropic import Anthropic
 from dotenv import load_dotenv
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-REPO_PATH = BASE_DIR / "repos" / "Python"
-TESTS_DIR = BASE_DIR / "tests" / "generated"
+from csv_columns import prepare_csv_for_save
+from dataset_config import BASE_DIR, add_dataset_argument, resolve_dataset
+
 PROMPT_TEMPLATE_PATH = BASE_DIR / "prompts" / "prompt_evaluate_tests.txt"
-INPUT_COVERAGE = BASE_DIR / "data" / "results" / "coverage_results.csv"
-INPUT_EVAL_GPT = BASE_DIR / "data" / "results" / "evaluation_results.csv"
-INPUT_EVAL_GPT_ALT = BASE_DIR / "data" / "results" / "evaluation_results_gpt.csv"
-SAMPLE_FILE = BASE_DIR / "data" / "selected_functions" / "pilot_sample_30.csv"
-OUTPUT_EVAL = BASE_DIR / "data" / "results" / "evaluation_results_claude.csv"
 
 DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-20250514"
 MAX_TOKENS = 1200
 TEMPERATURE = 0.0
 EXEC_LOG_MAX_CHARS = 4000
-RANDOM_SEED = 42
-SAMPLE_BY_LEVEL = {"baixa": 4, "media": 3, "alta": 3}
+EVAL_SAMPLE_PER_LEVEL = 10
+RANDOM_STATE = 42
+SAMPLE_BY_LEVEL = {
+    "baixa": EVAL_SAMPLE_PER_LEVEL,
+    "media": EVAL_SAMPLE_PER_LEVEL,
+    "alta": EVAL_SAMPLE_PER_LEVEL,
+}
+COMPLEXITY_ORDER = ("baixa", "media", "alta")
 MERGE_KEYS = ("function_name", "file_path")
 SELECT_KEYS = ("function_name", "test_file")
 
@@ -80,7 +82,17 @@ def normalize_complexity_level(value: object) -> str:
     return norm
 
 
+def format_balanced_summary(df: pd.DataFrame, n: int) -> str:
+    expected = sum(SAMPLE_BY_LEVEL.values())
+    work = df.copy()
+    work["complexity_level"] = work["complexity_level"].apply(normalize_complexity_level)
+    counts = work["complexity_level"].value_counts()
+    parts = [f"{level}={int(counts.get(level, 0))}" for level in COMPLEXITY_ORDER]
+    return f"Amostra balanceada: {n} de {expected} ({', '.join(parts)})"
+
+
 def select_balanced_sample(df: pd.DataFrame) -> pd.DataFrame:
+    """Seleciona amostra balanceada: 10 baixa, 10 média, 10 alta (total 30)."""
     work = df.copy()
     work["complexity_level"] = work["complexity_level"].apply(normalize_complexity_level)
     parts: list[pd.DataFrame] = []
@@ -92,7 +104,7 @@ def select_balanced_sample(df: pd.DataFrame) -> pd.DataFrame:
         k = min(target, available)
         if k == 0:
             continue
-        parts.append(pool.sample(n=k, random_state=RANDOM_SEED))
+        parts.append(pool.sample(n=k, random_state=RANDOM_STATE))
     if not parts:
         return work.iloc[0:0]
     return pd.concat(parts, ignore_index=True)
@@ -221,8 +233,10 @@ def _fill_prompt(template: str, row: pd.Series, *, source_code: str, test_code: 
     return prompt
 
 
-def _extract_function_from_repo(function_name: str, file_path: str) -> str | None:
-    source_file = REPO_PATH / Path(str(file_path).replace("\\", "/"))
+def _extract_function_from_repo(
+    function_name: str, file_path: str, *, repo_path: Path
+) -> str | None:
+    source_file = repo_path / Path(str(file_path).replace("\\", "/"))
     if not source_file.is_file():
         return None
     try:
@@ -245,7 +259,7 @@ def _extract_function_from_repo(function_name: str, file_path: str) -> str | Non
     return None
 
 
-def load_function_source(row: pd.Series) -> str:
+def load_function_source(row: pd.Series, *, repo_path: Path) -> str:
     from_sample = row.get("source_code")
     if isinstance(from_sample, str) and from_sample.strip():
         return from_sample
@@ -253,11 +267,12 @@ def load_function_source(row: pd.Series) -> str:
     extracted = _extract_function_from_repo(
         str(row["function_name"]),
         str(row["file_path"]),
+        repo_path=repo_path,
     )
     if extracted:
         return extracted
 
-    source_file = REPO_PATH / Path(str(row["file_path"]).replace("\\", "/"))
+    source_file = repo_path / Path(str(row["file_path"]).replace("\\", "/"))
     if source_file.is_file():
         try:
             return source_file.read_text(encoding="utf-8")
@@ -323,8 +338,15 @@ def _row_from_evaluation(
     }
 
 
-def evaluate_one(client: Anthropic, template: str, row: pd.Series, *, model: str) -> dict[str, object]:
-    source_code = load_function_source(row)
+def evaluate_one(
+    client: Anthropic,
+    template: str,
+    row: pd.Series,
+    *,
+    model: str,
+    repo_path: Path,
+) -> dict[str, object]:
+    source_code = load_function_source(row, repo_path=repo_path)
     test_code = load_test_code(row["test_file"])
     prompt = _fill_prompt(template, row, source_code=source_code, test_code=test_code)
 
@@ -344,24 +366,47 @@ def evaluate_one(client: Anthropic, template: str, row: pd.Series, *, model: str
     return _row_from_evaluation(row, scores, parse_err)
 
 
-def _load_prior_gpt_eval() -> pd.DataFrame | None:
-    for path in (INPUT_EVAL_GPT, INPUT_EVAL_GPT_ALT):
-        if path.exists():
-            print(f"Usando avaliação GPT de referência: {path.name}")
-            return pd.read_csv(path)
+def _load_prior_gpt_eval(path: Path) -> pd.DataFrame | None:
+    if path.exists():
+        print(f"Usando avaliação GPT de referência: {path.name}")
+        return pd.read_csv(path)
     return None
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Avalia testes gerados com GPT usando Claude como avaliador."
+    )
+    parser.add_argument(
+        "--pilot",
+        action="store_true",
+        help="Usa amostra piloto do dataset (apenas thealgorithms).",
+    )
+    add_dataset_argument(parser)
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
+    cfg = resolve_dataset(args.dataset)
+    sample_file = cfg.resolve_sample(pilot=args.pilot)
+    repo_path = cfg.repo_path
+    input_coverage = cfg.result_csv("cobertura_testes_gerados_gpt")
+    input_eval_gpt = cfg.result_csv("avaliacao_gpt_sobre_testes_gpt")
+    output_eval = cfg.result_csv("avaliacao_claude_sobre_testes_gpt")
+
     load_dotenv(BASE_DIR / ".env")
+
+    print(f"Dataset: {cfg.key}")
+    print(f"Amostra usada: {sample_file}")
 
     api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
         print("Erro: ANTHROPIC_API_KEY não definida no .env")
         return
 
-    if not INPUT_COVERAGE.exists():
-        print(f"Erro: arquivo não encontrado: {INPUT_COVERAGE}")
+    if not input_coverage.exists():
+        print(f"Erro: arquivo não encontrado: {input_coverage}")
         return
     if not PROMPT_TEMPLATE_PATH.exists():
         print(f"Erro: template não encontrado: {PROMPT_TEMPLATE_PATH}")
@@ -371,12 +416,12 @@ def main() -> None:
     model = resolve_claude_model()
     client = Anthropic(api_key=api_key)
 
-    df_cov = pd.read_csv(INPUT_COVERAGE)
-    df_prior = _load_prior_gpt_eval()
+    df_cov = pd.read_csv(input_coverage)
+    df_prior = _load_prior_gpt_eval(input_eval_gpt)
     if df_prior is not None:
         df_selected = select_from_prior_eval(df_cov, df_prior)
     else:
-        print("Aviso: evaluation_results.csv não encontrado; usando amostra balanceada.")
+        print("Aviso: avaliação GPT de referência não encontrada; usando amostra balanceada.")
         df_selected = select_balanced_sample(df_cov)
 
     n = len(df_selected)
@@ -384,8 +429,8 @@ def main() -> None:
         print("Nenhuma linha elegível para avaliar.")
         return
 
-    if SAMPLE_FILE.exists():
-        df_sample = pd.read_csv(SAMPLE_FILE)
+    if sample_file.exists():
+        df_sample = pd.read_csv(sample_file)
         df_eval = df_selected.merge(
             df_sample[list(MERGE_KEYS) + ["source_code"]],
             on=list(MERGE_KEYS),
@@ -393,17 +438,17 @@ def main() -> None:
         )
         missing = df_eval["source_code"].isna().sum()
         if missing:
-            print(f"Aviso: {missing} função(ões) sem source_code no pilot_sample; usando repos/Python.")
+            print(
+                f"Aviso: {missing} função(ões) sem source_code em {sample_file.name}; "
+                f"usando {repo_path}."
+            )
     else:
         df_eval = df_selected.copy()
-        print(f"Aviso: {SAMPLE_FILE.name} não encontrado; usando apenas repos/Python.")
+        print(f"Aviso: {sample_file.name} não encontrado; usando apenas {repo_path}.")
 
+    print(format_balanced_summary(df_eval, n))
     print(f"Modelo Claude: {model}")
     print(f"Iniciando avaliação de {n} testes...")
-    print(
-        "Distribuição: "
-        + ", ".join(f"{lvl}={cnt}" for lvl, cnt in df_eval["complexity_level"].value_counts().items())
-    )
 
     rows: list[dict[str, object]] = []
     for i in range(n):
@@ -413,16 +458,19 @@ def main() -> None:
         print(f"[{i + 1}/{n}] {name} ({level})...")
 
         try:
-            row_out = evaluate_one(client, template, row, model=model)
+            row_out = evaluate_one(
+                client, template, row, model=model, repo_path=repo_path
+            )
         except Exception as e:
             row_out = _row_from_evaluation(row, {}, f"Erro na API: {e}")
         rows.append(row_out)
 
     out_df = pd.DataFrame(rows)[OUTPUT_COLUMNS]
-    OUTPUT_EVAL.parent.mkdir(parents=True, exist_ok=True)
-    out_df.to_csv(OUTPUT_EVAL, index=False, encoding="utf-8")
+    output_eval.parent.mkdir(parents=True, exist_ok=True)
+    out_df = prepare_csv_for_save(out_df)
+    out_df.to_csv(output_eval, index=False, encoding="utf-8")
     errors = int((out_df["evaluation_error"] != "").sum())
-    print(f"\nAvaliação concluída: {OUTPUT_EVAL}")
+    print(f"\nAvaliação concluída: {output_eval}")
     print(f"Sucesso: {n - errors}/{n} | Com erro: {errors}/{n}")
 
 

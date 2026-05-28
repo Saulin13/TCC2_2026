@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import subprocess
@@ -6,15 +7,24 @@ import sys
 
 import pandas as pd
 
-# Raiz do projeto; todos os caminhos são relativos a ela
-BASE_DIR = Path(__file__).resolve().parent.parent
-INPUT_SAMPLE = BASE_DIR / "data" / "selected_functions" / "pilot_sample_30.csv"
-TESTS_DIR = BASE_DIR / "tests" / "generated"
-RESULTS_DIR = BASE_DIR / "data" / "results"
-REPO_PATH = BASE_DIR / "repos" / "Python"
+from csv_columns import prepare_csv_for_save
+from dataset_config import (
+    BASE_DIR,
+    DatasetConfig,
+    add_dataset_argument,
+    function_importable,
+    resolve_dataset,
+    resolve_installed_module_file,
+    resolve_module_path_from_row,
+)
+
+DATASET_THEALGORITHMS = "thealgorithms"
+DATASET_REAL = "real"
+
 COVERAGE_JSON = BASE_DIR / "coverage.json"
 DOT_COVERAGE = BASE_DIR / ".coverage"
-OUTPUT_CSV = RESULTS_DIR / "coverage_results.csv"
+
+MERGE_KEYS = ("function_name", "file_path")
 
 RESULT_COLUMNS = [
     "function_name",
@@ -26,6 +36,19 @@ RESULT_COLUMNS = [
     "passed",
     "return_code",
     "coverage_percent",
+    "stdout",
+    "stderr",
+    "coverage_error",
+]
+
+EXECUTION_COLUMNS = [
+    "function_name",
+    "file_path",
+    "complexity_level",
+    "test_file",
+    "execution_status",
+    "passed",
+    "return_code",
     "stdout",
     "stderr",
 ]
@@ -95,40 +118,214 @@ def _execution_status(return_code: int) -> str:
         return "ok"
     if return_code == 1:
         return "tests_failed"
-    if return_code == 5:
-        return "no_tests_collected"
-    if return_code in (2, 3, 4):
+    if return_code >= 2:
         return "pytest_error"
     return "error"
 
 
-def main():
-    if not INPUT_SAMPLE.exists():
-        print(f"Arquivo não encontrado: {INPUT_SAMPLE}")
+def _prepare_run_env(cfg: DatasetConfig) -> dict[str, str]:
+    """Para dataset real, não injeta repos/scikit-learn no PYTHONPATH."""
+    env = os.environ.copy()
+    repo = os.fspath(cfg.repo_path)
+
+    if cfg.key == DATASET_REAL:
+        pythonpath = env.get("PYTHONPATH", "")
+        if pythonpath:
+            parts = [p for p in pythonpath.split(os.pathsep) if p and os.path.normpath(p) != os.path.normpath(repo)]
+            if parts:
+                env["PYTHONPATH"] = os.pathsep.join(parts)
+            else:
+                env.pop("PYTHONPATH", None)
+    else:
+        env["PYTHONPATH"] = repo
+    return env
+
+
+def _build_pytest_cmd(test_arg: str) -> list[str]:
+    return [sys.executable, "-m", "pytest", "-q", test_arg]
+
+
+def _build_coverage_run_cmd(
+    *,
+    test_arg: str,
+    module_path: str,
+    coverage_target: Path,
+) -> list[str]:
+    source_dir = os.fspath(coverage_target.resolve().parent)
+    return [
+        sys.executable,
+        "-m",
+        "coverage",
+        "run",
+        "--source",
+        source_dir,
+        "-m",
+        "pytest",
+        "-q",
+        test_arg,
+    ]
+
+
+def _build_real_coverage_run_cmd(*, test_arg: str, module_path: str) -> list[str]:
+    return [
+        sys.executable,
+        "-m",
+        "coverage",
+        "run",
+        "--source",
+        module_path,
+        "-m",
+        "pytest",
+        "-q",
+        test_arg,
+    ]
+
+
+def _read_coverage_percent(coverage_target: Path | None) -> tuple[float, str]:
+    """Lê .coverage existente. Retorna (coverage_percent, coverage_error)."""
+    errors: list[str] = []
+
+    if not DOT_COVERAGE.exists():
+        return 0.0, ".coverage não foi gerado após coverage run"
+
+    json_completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "coverage",
+            "json",
+            "-o",
+            os.fspath(COVERAGE_JSON),
+        ],
+        cwd=str(BASE_DIR),
+        capture_output=True,
+    )
+    jerr = _decode_subprocess_output(json_completed.stderr)
+    if jerr.strip():
+        errors.append(f"[coverage-json] {jerr.strip()}")
+    if json_completed.returncode != 0:
+        errors.append(
+            f"[coverage-json] código de saída {json_completed.returncode}"
+        )
+
+    if not COVERAGE_JSON.exists():
+        return 0.0, "\n".join(errors) if errors else "coverage.json não foi gerado"
+
+    try:
+        with COVERAGE_JSON.open("r", encoding="utf-8") as f:
+            cov_data = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        errors.append(f"[coverage-parse] {e}")
+        return 0.0, "\n".join(errors)
+
+    if coverage_target is not None and coverage_target.exists():
+        return _coverage_percent_for_source(cov_data, coverage_target), "\n".join(errors)
+
+    if errors:
+        return 0.0, "\n".join(errors)
+    return 0.0, "arquivo fonte do módulo instalado não encontrado para mapear cobertura"
+
+
+def _run_real_coverage(
+    *,
+    test_arg: str,
+    module_path: str,
+    coverage_target: Path | None,
+    env: dict[str, str],
+    timeout: int = 30,
+) -> tuple[float, str]:
+    """Segundo passo (dataset real): coverage isolado; não altera status de execução."""
+    _cleanup_coverage_artifacts()
+    errors: list[str] = []
+
+    try:
+        completed = subprocess.run(
+            _build_real_coverage_run_cmd(test_arg=test_arg, module_path=module_path),
+            env=env,
+            cwd=str(BASE_DIR),
+            capture_output=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        _cleanup_coverage_artifacts()
+        return 0.0, "coverage run excedeu timeout"
+    except OSError as e:
+        _cleanup_coverage_artifacts()
+        return 0.0, f"erro ao executar coverage: {e}"
+
+    cov_stdout = _decode_subprocess_output(completed.stdout)
+    cov_stderr = _decode_subprocess_output(completed.stderr)
+    if completed.returncode != 0:
+        errors.append(f"coverage run retornou código {completed.returncode}")
+    if cov_stderr.strip():
+        errors.append(cov_stderr.strip())
+    if cov_stdout.strip():
+        errors.append(cov_stdout.strip())
+
+    cov_pct, read_err = _read_coverage_percent(coverage_target)
+    if read_err.strip():
+        errors.append(read_err.strip())
+
+    _cleanup_coverage_artifacts()
+    return cov_pct, "\n".join(errors).strip()
+
+
+def _load_sample_unique(sample_csv: Path) -> pd.DataFrame:
+    df = pd.read_csv(sample_csv)
+    before = len(df)
+    df = df.drop_duplicates(subset=list(MERGE_KEYS), keep="first").reset_index(drop=True)
+    removed = before - len(df)
+    if removed > 0:
+        print(f"Aviso: {removed} linha(s) duplicada(s) removida(s) da amostra.")
+    return df
+
+
+def run_tests_for_generator(
+    *,
+    cfg: DatasetConfig,
+    generator_name: str,
+    tests_dir: Path,
+    output_coverage_csv: Path,
+    output_execution_csv: Path,
+) -> None:
+    sample_csv = cfg.sample_csv
+    repo_path = cfg.repo_path
+
+    if not sample_csv.exists():
+        print(f"Arquivo não encontrado: {sample_csv}")
         return
 
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    TESTS_DIR.mkdir(parents=True, exist_ok=True)
-    df = pd.read_csv(INPUT_SAMPLE)
+    cfg.results_dir.mkdir(parents=True, exist_ok=True)
+    tests_dir.mkdir(parents=True, exist_ok=True)
+    df = _load_sample_unique(sample_csv)
 
-    env = os.environ.copy()
-    env["PYTHONPATH"] = os.fspath(REPO_PATH)
+    env = _prepare_run_env(cfg)
+    use_installed_sklearn = cfg.key == DATASET_REAL
 
-    rows_out = []
+    rows_out: list[dict] = []
     n = len(df)
 
-    print(" Iniciando execução individual dos testes com cobertura por arquivo...")
+    print(f"Dataset: {cfg.key}")
+    if use_installed_sklearn:
+        print(
+            "Modo real: pytest puro classifica execução; coverage em passo separado "
+            "(sklearn via pip, sem PYTHONPATH do clone)."
+        )
+    print(
+        f"Iniciando execução ({generator_name}): {n} teste(s) "
+        f"(cobertura + execução por arquivo)..."
+    )
 
     for pos, (_, row) in enumerate(df.iterrows()):
-        func_name = row["function_name"]
+        func_name = str(row["function_name"])
         file_path_cell = row["file_path"]
-        source_file = REPO_PATH / Path(str(file_path_cell).replace("\\", "/"))
+        module_path = resolve_module_path_from_row(row, dataset_key=cfg.key)
 
         seq = pos + 1
-        test_path = TESTS_DIR / f"test_{seq:03d}_{func_name}.py"
+        test_path = tests_dir / f"test_{seq:03d}_{func_name}.py"
         test_rel = test_path.relative_to(BASE_DIR).as_posix()
 
-        print(f"[{pos + 1}/{n}] {func_name}...", end=" ")
+        print(f"[{seq}/{n}] {func_name}...", end=" ", flush=True)
 
         if not test_path.exists():
             rows_out.append(
@@ -144,16 +341,115 @@ def main():
                     "coverage_percent": 0.0,
                     "stdout": "",
                     "stderr": "",
+                    "coverage_error": "",
                 }
             )
             print("sem arquivo de teste")
             continue
 
-        if not source_file.exists():
+        coverage_target: Path | None = None
+
+        if use_installed_sklearn:
+            if not function_importable(module_path, func_name):
+                rows_out.append(
+                    {
+                        "function_name": func_name,
+                        "file_path": file_path_cell,
+                        "complexity_score": row["complexity_score"],
+                        "complexity_level": row["complexity_level"],
+                        "test_file": test_rel,
+                        "execution_status": "missing_source_module",
+                        "passed": False,
+                        "return_code": -2,
+                        "coverage_percent": 0.0,
+                        "stdout": "",
+                        "stderr": (
+                            f"Função não importável no sklearn instalado: "
+                            f"{module_path}.{func_name}"
+                        ),
+                        "coverage_error": "",
+                    }
+                )
+                print("módulo/função ausente no pip")
+                continue
+            coverage_target = resolve_installed_module_file(module_path)
+        else:
+            source_file = repo_path / Path(str(file_path_cell).replace("\\", "/"))
+            if not source_file.exists():
+                try:
+                    disp = source_file.relative_to(BASE_DIR).as_posix()
+                except ValueError:
+                    disp = os.fspath(source_file)
+                rows_out.append(
+                    {
+                        "function_name": func_name,
+                        "file_path": file_path_cell,
+                        "complexity_score": row["complexity_score"],
+                        "complexity_level": row["complexity_level"],
+                        "test_file": test_rel,
+                        "execution_status": "missing_source_file",
+                        "passed": False,
+                        "return_code": -2,
+                        "coverage_percent": 0.0,
+                        "stdout": "",
+                        "stderr": f"Arquivo fonte não encontrado: {disp}",
+                        "coverage_error": "",
+                    }
+                )
+                print("fonte ausente")
+                continue
+            coverage_target = source_file
+
+        test_arg = os.fspath(test_path.resolve())
+
+        if use_installed_sklearn:
             try:
-                disp = source_file.relative_to(BASE_DIR).as_posix()
-            except ValueError:
-                disp = os.fspath(source_file)
+                pytest_completed = subprocess.run(
+                    _build_pytest_cmd(test_arg),
+                    env=env,
+                    cwd=str(BASE_DIR),
+                    capture_output=True,
+                    timeout=30,
+                )
+            except subprocess.TimeoutExpired as e:
+                stdout = _decode_subprocess_output(e.stdout)
+                stderr = _decode_subprocess_output(e.stderr)
+                if not stderr.strip():
+                    stderr = f"pytest excedeu timeout de {e.timeout}s"
+                else:
+                    stderr = f"{stderr}\n(timeout de {e.timeout}s)".strip()
+                rows_out.append(
+                    {
+                        "function_name": func_name,
+                        "file_path": file_path_cell,
+                        "complexity_score": row["complexity_score"],
+                        "complexity_level": row["complexity_level"],
+                        "test_file": test_rel,
+                        "execution_status": "timeout",
+                        "passed": False,
+                        "return_code": -3,
+                        "coverage_percent": 0.0,
+                        "stdout": stdout,
+                        "stderr": stderr,
+                        "coverage_error": "não executado: timeout no pytest",
+                    }
+                )
+                print("timeout")
+                continue
+
+            stdout = _decode_subprocess_output(pytest_completed.stdout)
+            stderr = _decode_subprocess_output(pytest_completed.stderr)
+            rc = int(pytest_completed.returncode)
+            passed = rc == 0
+            status = _execution_status(rc)
+
+            cov_pct, coverage_error = _run_real_coverage(
+                test_arg=test_arg,
+                module_path=module_path,
+                coverage_target=coverage_target,
+                env=env,
+            )
+
             rows_out.append(
                 {
                     "function_name": func_name,
@@ -161,34 +457,24 @@ def main():
                     "complexity_score": row["complexity_score"],
                     "complexity_level": row["complexity_level"],
                     "test_file": test_rel,
-                    "execution_status": "missing_source_file",
-                    "passed": False,
-                    "return_code": -2,
-                    "coverage_percent": 0.0,
-                    "stdout": "",
-                    "stderr": f"Arquivo fonte não encontrado: {disp}",
+                    "execution_status": status,
+                    "passed": passed,
+                    "return_code": rc,
+                    "coverage_percent": cov_pct,
+                    "stdout": stdout,
+                    "stderr": stderr,
+                    "coverage_error": coverage_error,
                 }
             )
-            print("fonte ausente")
+            print(f"{status} | cobertura {cov_pct:.1f}%")
             continue
 
-        # Remove artefatos de cobertura antes de executar este teste
         _cleanup_coverage_artifacts()
-
-        test_arg = os.fspath(test_path.resolve())
-        source_dir = os.fspath(source_file.resolve().parent)
-
-        cmd_run = [
-            sys.executable,
-            "-m",
-            "coverage",
-            "run",
-            "--source",
-            source_dir,
-            "-m",
-            "pytest",
-            test_arg,
-        ]
+        cmd_run = _build_coverage_run_cmd(
+            test_arg=test_arg,
+            module_path=module_path,
+            coverage_target=coverage_target,
+        )
 
         try:
             completed = subprocess.run(
@@ -219,6 +505,7 @@ def main():
                     "coverage_percent": 0.0,
                     "stdout": stdout,
                     "stderr": stderr,
+                    "coverage_error": "",
                 }
             )
             print("timeout")
@@ -226,41 +513,13 @@ def main():
 
         stdout = _decode_subprocess_output(completed.stdout)
         stderr = _decode_subprocess_output(completed.stderr)
-        rc = completed.returncode
+        rc = int(completed.returncode)
         passed = rc == 0
         status = _execution_status(rc)
 
-        cov_pct = 0.0
-        if DOT_COVERAGE.exists():
-            json_completed = subprocess.run(
-                [
-                    sys.executable,
-                    "-m",
-                    "coverage",
-                    "json",
-                    "-o",
-                    os.fspath(COVERAGE_JSON),
-                ],
-                env=env,
-                cwd=str(BASE_DIR),
-                capture_output=True,
-            )
-            jerr = _decode_subprocess_output(json_completed.stderr)
-            if jerr.strip():
-                stderr = f"{stderr}\n[coverage-json] {jerr}".strip()
-            if json_completed.returncode != 0:
-                stderr = (
-                    f"{stderr}\n[coverage-json] código de saída {json_completed.returncode}"
-                ).strip()
-            if COVERAGE_JSON.exists():
-                try:
-                    with COVERAGE_JSON.open("r", encoding="utf-8") as f:
-                        cov_data = json.load(f)
-                    cov_pct = _coverage_percent_for_source(cov_data, source_file)
-                except (json.JSONDecodeError, OSError, KeyError) as e:
-                    stderr = f"{stderr}\n[coverage-parse] {e}".strip()
-        else:
-            stderr = f"{stderr}\n[coverage] .coverage não foi gerado após coverage run".strip()
+        cov_pct, coverage_error = _read_coverage_percent(coverage_target)
+        if coverage_error.strip():
+            stderr = f"{stderr}\n{coverage_error}".strip()
 
         _cleanup_coverage_artifacts()
 
@@ -277,14 +536,50 @@ def main():
                 "coverage_percent": cov_pct,
                 "stdout": stdout,
                 "stderr": stderr,
+                "coverage_error": coverage_error,
             }
         )
         print(f"{status} | cobertura {cov_pct:.1f}%")
 
-    pd.DataFrame(rows_out)[RESULT_COLUMNS].to_csv(
-        OUTPUT_CSV, index=False, encoding="utf-8"
+    result_df = pd.DataFrame(rows_out)
+    result_df = result_df.drop_duplicates(subset=list(MERGE_KEYS), keep="last")
+
+    prepare_csv_for_save(result_df)[RESULT_COLUMNS].to_csv(
+        output_coverage_csv, index=False, encoding="utf-8"
     )
-    print(f"\n Resultados salvos em: {OUTPUT_CSV}")
+    prepare_csv_for_save(result_df)[EXECUTION_COLUMNS].to_csv(
+        output_execution_csv, index=False, encoding="utf-8"
+    )
+
+    print(f"\nCobertura salva em: {output_coverage_csv}")
+    print(f"Execução salva em: {output_execution_csv}")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Executa testes gerados e calcula cobertura por arquivo."
+    )
+    parser.add_argument(
+        "--generator",
+        choices=("gpt", "claude"),
+        required=True,
+        help="Gerador de testes a executar (gpt ou claude).",
+    )
+    add_dataset_argument(parser)
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    cfg = resolve_dataset(args.dataset)
+    generator = args.generator
+    run_tests_for_generator(
+        cfg=cfg,
+        generator_name=generator,
+        tests_dir=cfg.tests_dir(generator),
+        output_coverage_csv=cfg.result_csv(f"cobertura_testes_gerados_{generator}"),
+        output_execution_csv=cfg.result_csv(f"execucao_testes_{generator}"),
+    )
 
 
 if __name__ == "__main__":

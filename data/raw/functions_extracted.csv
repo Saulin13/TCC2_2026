@@ -19828,6 +19828,229 @@ __repr__,geometry\jarvis_march.py,37,38,"    def __repr__(self) -> str:
         return f""Point({self.x}, {self.y})"""
 __hash__,geometry\jarvis_march.py,40,41,"    def __hash__(self) -> int:
         return hash((self.x, self.y))"
+_euclidean_distance,geometry\ramer_douglas_peucker.py,19,30,"def _euclidean_distance(
+    point_a: tuple[float, float],
+    point_b: tuple[float, float],
+) -> float:
+    """"""Return the Euclidean distance between two 2-D points.
+
+    >>> _euclidean_distance((0.0, 0.0), (3.0, 4.0))
+    5.0
+    >>> _euclidean_distance((1.0, 1.0), (1.0, 1.0))
+    0.0
+    """"""
+    return math.hypot(point_b[0] - point_a[0], point_b[1] - point_a[1])"
+_perpendicular_distance,geometry\ramer_douglas_peucker.py,33,76,"def _perpendicular_distance(
+    point: tuple[float, float],
+    line_start: tuple[float, float],
+    line_end: tuple[float, float],
+) -> float:
+    """"""Return the distance from *point* to the line **segment** between
+    *line_start* and *line_end*.
+
+    When the perpendicular projection of *point* onto the infinite line falls
+    within the segment, this equals the perpendicular distance to that line.
+    When the projection falls outside the segment, the distance to the nearest
+    endpoint is returned instead (projection clamped to [0, 1]).
+
+    This is the correct distance measure for the Ramer-Douglas-Peucker
+    algorithm: using the infinite-line distance can incorrectly discard points
+    whose projection lies beyond a segment endpoint.
+
+    >>> _perpendicular_distance((4.0, 0.0), (0.0, 0.0), (0.0, 3.0))
+    4.0
+    >>> # order of line_start and line_end does not affect the result
+    >>> _perpendicular_distance((4.0, 0.0), (0.0, 3.0), (0.0, 0.0))
+    4.0
+    >>> _perpendicular_distance((4.0, 1.0), (0.0, 1.0), (0.0, 4.0))
+    4.0
+    >>> _perpendicular_distance((2.0, 1.0), (-2.0, 1.0), (-2.0, 4.0))
+    4.0
+    >>> # projection falls outside the segment; distance to nearest endpoint
+    >>> round(_perpendicular_distance((0.0, 2.0), (1.0, 0.0), (3.0, 0.0)), 6)
+    2.236068
+    """"""
+    px, py = point
+    ax, ay = line_start
+    bx, by = line_end
+    dx, dy = bx - ax, by - ay
+    seg_len_sq = dx * dx + dy * dy
+    if seg_len_sq == 0.0:
+        # line_start and line_end coincide; fall back to point-to-point distance
+        return _euclidean_distance(point, line_start)
+    # Project point onto the segment line, then clamp t to [0, 1] so the
+    # nearest point is always on the segment rather than the infinite line.
+    t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / seg_len_sq))
+    nearest_x = ax + t * dx
+    nearest_y = ay + t * dy
+    return math.hypot(px - nearest_x, py - nearest_y)"
+ramer_douglas_peucker,geometry\ramer_douglas_peucker.py,79,178,"def ramer_douglas_peucker(
+    pts: list[tuple[float, float]],
+    epsilon: float,
+) -> list[tuple[float, float]]:
+    """"""Simplify a polyline using the Ramer-Douglas-Peucker algorithm.
+
+    Given a sequence of 2-D points and a maximum allowable deviation
+    *epsilon* (>= 0), returns a simplified list of points such that no
+    discarded point is farther than *epsilon* from the simplified polyline.
+
+    Parameters
+    ----------
+    pts:
+        Ordered sequence of ``(x, y)`` points describing the polyline.
+    epsilon:
+        Maximum allowable distance of any discarded point from the
+        simplified polyline.  Must be non-negative.
+
+    Returns
+    -------
+    list[tuple[float, float]]
+        Simplified list of ``(x, y)`` points.  The first and last points of
+        *pts* are always preserved.
+
+    Raises
+    ------
+    ValueError
+        If *epsilon* is negative.
+
+    References
+    ----------
+    https://en.wikipedia.org/wiki/Ramer%E2%80%93Douglas%E2%80%93Peucker_algorithm
+
+    Examples
+    --------
+    >>> ramer_douglas_peucker([], epsilon=1.0)
+    []
+    >>> ramer_douglas_peucker([(0.0, 0.0)], epsilon=1.0)
+    [(0.0, 0.0)]
+    >>> ramer_douglas_peucker([(0.0, 0.0), (1.0, 0.0)], epsilon=1.0)
+    [(0.0, 0.0), (1.0, 0.0)]
+    >>> # middle point is within epsilon - it is discarded
+    >>> ramer_douglas_peucker([(0.0, 0.0), (1.0, 0.1), (2.0, 0.0)], epsilon=0.5)
+    [(0.0, 0.0), (2.0, 0.0)]
+    >>> # middle point exceeds epsilon - it is kept
+    >>> ramer_douglas_peucker([(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)], epsilon=0.5)
+    [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]
+    >>> ramer_douglas_peucker([(0.0, 0.0), (1.0, 0.5), (2.0, 0.0)], epsilon=-1.0)
+    Traceback (most recent call last):
+        ...
+    ValueError: epsilon must be non-negative, got -1.0
+    """"""
+    if epsilon < 0:
+        msg = f""epsilon must be non-negative, got {epsilon!r}""
+        raise ValueError(msg)
+
+    if len(pts) < 3:
+        return list(pts)
+
+    # ---------------------------------------------------------------------------
+    # Iterative, stack-based implementation.
+    #
+    # The naive recursive approach copies sublists at every level via slicing
+    # (pts[:max_index+1] / pts[max_index:]), which is O(n) per call and makes
+    # the overall algorithm O(n²) in memory even for well-balanced splits.  An
+    # explicit stack operating on index ranges avoids all copying and also
+    # eliminates the risk of hitting Python's recursion limit for long polylines.
+    # ---------------------------------------------------------------------------
+    n = len(pts)
+
+    # keep[i] is True when pts[i] must appear in the output.
+    keep: list[bool] = [False] * n
+    keep[0] = True
+    keep[-1] = True
+
+    # Stack of (start_index, end_index) pairs still to be examined.
+    stack: list[tuple[int, int]] = [(0, n - 1)]
+
+    while stack:
+        start, end = stack.pop()
+        if end - start < 2:
+            # Only one interior candidate at most; nothing to split further.
+            continue
+
+        # Find the interior point with the greatest distance to the segment.
+        max_dist = 0.0
+        max_index = start
+        for i in range(start + 1, end):
+            dist = _perpendicular_distance(pts[i], pts[start], pts[end])
+            if dist > max_dist:
+                max_dist = dist
+                max_index = i
+
+        if max_dist > epsilon:
+            keep[max_index] = True
+            stack.append((start, max_index))
+            stack.append((max_index, end))
+        # else: all interior points are within epsilon; discard them all.
+
+    return [pts[i] for i in range(n) if keep[i]]"
+direction,geometry\segment_intersection.py,30,48,"def direction(pivot: Point, target: Point, query: Point) -> float:
+    """"""Return the cross product of vectors (pivot->query) and (pivot->target).
+
+    The sign of the result encodes the orientation of the ordered triple
+    (pivot, target, query):
+      - Negative  ->  counter-clockwise (left turn)
+      - Positive  ->  clockwise (right turn)
+      - Zero      ->  collinear
+
+    >>> direction(Point(0, 0), Point(1, 0), Point(0, 1))
+    -1
+    >>> direction(Point(0, 0), Point(0, 1), Point(1, 0))
+    1
+    >>> direction(Point(0, 0), Point(1, 1), Point(2, 2))
+    0
+    """"""
+    return (query.x - pivot.x) * (target.y - pivot.y) - (target.x - pivot.x) * (
+        query.y - pivot.y
+    )"
+on_segment,geometry\segment_intersection.py,51,63,"def on_segment(seg_start: Point, seg_end: Point, point: Point) -> bool:
+    """"""Check whether *point*, known to be collinear with the segment, lies on it.
+
+    >>> on_segment(Point(0, 0), Point(4, 4), Point(2, 2))
+    True
+    >>> on_segment(Point(0, 0), Point(4, 4), Point(5, 5))
+    False
+    >>> on_segment(Point(0, 0), Point(4, 0), Point(2, 0))
+    True
+    """"""
+    return min(seg_start.x, seg_end.x) <= point.x <= max(
+        seg_start.x, seg_end.x
+    ) and min(seg_start.y, seg_end.y) <= point.y <= max(seg_start.y, seg_end.y)"
+segments_intersect,geometry\segment_intersection.py,66,100,"def segments_intersect(p1: Point, p2: Point, p3: Point, p4: Point) -> bool:
+    """"""Return True if line segment p1p2 intersects line segment p3p4.
+
+    Uses the CLRS cross-product / orientation method.  Handles both the
+    general case (proper crossing) and degenerate cases where one endpoint
+    lies exactly on the other segment.
+
+    >>> segments_intersect(Point(0, 0), Point(2, 2), Point(0, 2), Point(2, 0))
+    True
+    >>> segments_intersect(Point(0, 0), Point(2, 2), Point(1, 1), Point(3, 3))
+    True
+    >>> segments_intersect(Point(0, 0), Point(1, 0), Point(2, 0), Point(3, 0))
+    False
+    >>> segments_intersect(Point(0, 0), Point(1, 1), Point(1, 0), Point(2, 1))
+    False
+    >>> segments_intersect(Point(0, 0), Point(1, 1), Point(0, 1), Point(0, 2))
+    False
+    >>> segments_intersect(Point(0, 0), Point(1, 0), Point(1, 0), Point(2, 0))
+    True
+    """"""
+    d1 = direction(p3, p4, p1)
+    d2 = direction(p3, p4, p2)
+    d3 = direction(p1, p2, p3)
+    d4 = direction(p1, p2, p4)
+
+    if ((d1 < 0 < d2) or (d2 < 0 < d1)) and ((d3 < 0 < d4) or (d4 < 0 < d3)):
+        return True
+
+    if d1 == 0 and on_segment(p3, p4, p1):
+        return True
+    if d2 == 0 and on_segment(p3, p4, p2):
+        return True
+    if d3 == 0 and on_segment(p1, p2, p3):
+        return True
+    return d4 == 0 and on_segment(p1, p2, p4)"
 __init__,graphics\bezier_curve.py,15,23,"    def __init__(self, list_of_points: list[tuple[float, float]]):
         """"""
         list_of_points: Control points in the xy plane on which to interpolate. These
@@ -25128,6 +25351,110 @@ topological_sort,graphs\g_topological_sort.py,38,41,"def topological_sort(graph,
     for v in range(len(graph)):
         if not visited[v]:
             depth_first_search(v, visited, graph)"
+_collect_nodes_and_edges,graphs\johnson.py,9,17,"def _collect_nodes_and_edges(graph: adjacency) -> tuple[list[Node], list[edge]]:
+    nodes = set()
+    edges: list[edge] = []
+    for u, neighbors in graph.items():
+        nodes.add(u)
+        for v, w in neighbors:
+            nodes.add(v)
+            edges.append((u, v, w))
+    return list(nodes), edges"
+_bellman_ford,graphs\johnson.py,20,40,"def _bellman_ford(nodes: list[Node], edges: list[edge]) -> dict[Node, float]:
+    """"""
+    Bellman-Ford relaxation to compute potentials h[v] for all vertices.
+    Raises ValueError if a negative weight cycle exists.
+    """"""
+    dist: dict[Node, float] = dict.fromkeys(nodes, 0.0)
+    n = len(nodes)
+
+    for _ in range(n - 1):
+        updated = False
+        for u, v, w in edges:
+            if dist[u] + w < dist[v]:
+                dist[v] = dist[u] + w
+                updated = True
+        if not updated:
+            break
+    else:
+        for u, v, w in edges:
+            if dist[u] + w < dist[v]:
+                raise ValueError(""Negative weight cycle detected"")
+    return dist"
+_dijkstra,graphs\johnson.py,43,72,"def _dijkstra(
+    start: Node,
+    nodes: list[Node],
+    graph: adjacency,
+    potentials: dict[Node, float],
+) -> dict[Node, float]:
+    """"""
+    Dijkstra over reweighted graph, using potentials h to make weights non-negative.
+    Returns distances from start in the reweighted space.
+    """"""
+    inf = float(""inf"")
+    dist: dict[Node, float] = dict.fromkeys(nodes, inf)
+    dist[start] = 0.0
+    heap: list[tuple[float, Node]] = [(0.0, start)]
+
+    while heap:
+        d_u, u = heapq.heappop(heap)
+        if d_u > dist[u]:
+            continue
+        for v, w in graph.get(u, []):
+            w_prime = w + potentials[u] - potentials[v]
+            if w_prime < 0:
+                raise ValueError(
+                    ""Negative edge weight after reweighting: numeric error""
+                )
+            new_dist = d_u + w_prime
+            if new_dist < dist[v]:
+                dist[v] = new_dist
+                heapq.heappush(heap, (new_dist, v))
+    return dist"
+johnson,graphs\johnson.py,75,118,"def johnson(graph: adjacency) -> dict[Node, dict[Node, float]]:
+    """"""
+    Compute all-pairs shortest paths using Johnson's algorithm.
+
+    Reference:
+        https://en.wikipedia.org/wiki/Johnson%27s_algorithm
+
+    Args:
+        graph: adjacency list {u: [(v, weight), ...], ...}
+
+    Returns:
+        dict of dicts: dist[u][v] = shortest distance from u to v
+
+    Raises:
+        ValueError: if a negative weight cycle is detected
+
+    Example:
+    >>> g = {
+    ...     0: [(1, 3), (2, 8), (4, -4)],
+    ...     1: [(3, 1), (4, 7)],
+    ...     2: [(1, 4)],
+    ...     3: [(0, 2), (2, -5)],
+    ...     4: [(3, 6)],
+    ... }
+    >>> round(johnson(g)[0][3], 2)
+    2.0
+    """"""
+    nodes, edges = _collect_nodes_and_edges(graph)
+    potentials = _bellman_ford(nodes, edges)
+
+    all_pairs: dict[Node, dict[Node, float]] = {}
+    inf = float(""inf"")
+    for s in nodes:
+        dist_reweighted = _dijkstra(s, nodes, graph, potentials)
+        dists_orig: dict[Node, float] = {}
+        for v in nodes:
+            d_prime = dist_reweighted[v]
+            if d_prime < inf:
+                dists_orig[v] = d_prime - potentials[s] + potentials[v]
+            else:
+                dists_orig[v] = inf
+        all_pairs[s] = dists_orig
+
+    return all_pairs"
 longest_distance,graphs\kahns_algorithm_long.py,2,25,"def longest_distance(graph):
     indegree = [0] * len(graph)
     queue = []
@@ -55240,7 +55567,7 @@ strand_sort,sorts\strand_sort.py,4,46,"def strand_sort(arr: list, reverse: bool 
 
     strand_sort(arr, reverse, solution)
     return solution"
-binary_search,sorts\tim_sort.py,1,13,"def binary_search(lst, item, start, end):
+binary_search,sorts\tim_sort.py,4,16,"def binary_search(lst: list[Any], item: Any, start: int, end: int) -> int:
     if start == end:
         return start if lst[start] > item else start + 1
     if start > end:
@@ -55253,7 +55580,7 @@ binary_search,sorts\tim_sort.py,1,13,"def binary_search(lst, item, start, end):
         return binary_search(lst, item, start, mid - 1)
     else:
         return mid"
-insertion_sort,sorts\tim_sort.py,16,24,"def insertion_sort(lst):
+insertion_sort,sorts\tim_sort.py,19,27,"def insertion_sort(lst: list[Any]) -> list[Any]:
     length = len(lst)
 
     for index in range(1, length):
@@ -55262,7 +55589,7 @@ insertion_sort,sorts\tim_sort.py,16,24,"def insertion_sort(lst):
         lst = [*lst[:pos], value, *lst[pos:index], *lst[index + 1 :]]
 
     return lst"
-merge,sorts\tim_sort.py,27,37,"def merge(left, right):
+merge,sorts\tim_sort.py,30,40,"def merge(left: list[Any], right: list[Any]) -> list[Any]:
     if not left:
         return right
 
@@ -55273,7 +55600,7 @@ merge,sorts\tim_sort.py,27,37,"def merge(left, right):
         return [left[0], *merge(left[1:], right)]
 
     return [right[0], *merge(left, right[1:])]"
-tim_sort,sorts\tim_sort.py,40,72,"def tim_sort(lst):
+tim_sort,sorts\tim_sort.py,43,75,"def tim_sort(lst: list[Any] | tuple[Any, ...] | str) -> list[Any]:
     """"""
     >>> tim_sort(""Python"")
     ['P', 'h', 'n', 'o', 't', 'y']
@@ -55289,7 +55616,7 @@ tim_sort,sorts\tim_sort.py,40,72,"def tim_sort(lst):
     length = len(lst)
     runs, sorted_runs = [], []
     new_run = [lst[0]]
-    sorted_array = []
+    sorted_array: list[Any] = []
     i = 1
     while i < length:
         if lst[i] < lst[i - 1]:
@@ -55306,7 +55633,7 @@ tim_sort,sorts\tim_sort.py,40,72,"def tim_sort(lst):
         sorted_array = merge(sorted_array, run)
 
     return sorted_array"
-main,sorts\tim_sort.py,75,78,"def main():
+main,sorts\tim_sort.py,78,81,"def main():
     lst = [5, 9, 10, 3, -4, 5, 178, 92, 46, -18, 0, 7]
     sorted_lst = tim_sort(lst)
     print(sorted_lst)"

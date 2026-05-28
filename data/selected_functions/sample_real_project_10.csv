@@ -1,0 +1,691 @@
+function_name,file_path,module_path,start_line,end_line,source_code,complexity_score,radon_rank,complexity_level,repository
+mean_tweedie_deviance,sklearn/metrics/_regression.py,sklearn.metrics._regression,1410,1492,"def mean_tweedie_deviance(y_true, y_pred, *, sample_weight=None, power=0):
+    """"""Mean Tweedie deviance regression loss.
+
+    Read more in the :ref:`User Guide <mean_tweedie_deviance>`.
+
+    Parameters
+    ----------
+    y_true : array-like of shape (n_samples,)
+        Ground truth (correct) target values.
+
+    y_pred : array-like of shape (n_samples,)
+        Estimated target values.
+
+    sample_weight : array-like of shape (n_samples,), default=None
+        Sample weights.
+
+    power : float, default=0
+        Tweedie power parameter. Either power <= 0 or power >= 1.
+
+        The higher `p` the less weight is given to extreme
+        deviations between true and predicted targets.
+
+        - power < 0: Extreme stable distribution. Requires: y_pred > 0.
+        - power = 0 : Normal distribution, output corresponds to
+          mean_squared_error. y_true and y_pred can be any real numbers.
+        - power = 1 : Poisson distribution. Requires: y_true >= 0 and
+          y_pred > 0.
+        - 1 < p < 2 : Compound Poisson distribution. Requires: y_true >= 0
+          and y_pred > 0.
+        - power = 2 : Gamma distribution. Requires: y_true > 0 and y_pred > 0.
+        - power = 3 : Inverse Gaussian distribution. Requires: y_true > 0
+          and y_pred > 0.
+        - otherwise : Positive stable distribution. Requires: y_true > 0
+          and y_pred > 0.
+
+    Returns
+    -------
+    loss : float
+        A non-negative floating point value (the best value is 0.0).
+
+    Examples
+    --------
+    >>> from sklearn.metrics import mean_tweedie_deviance
+    >>> y_true = [2, 0, 1, 4]
+    >>> y_pred = [0.5, 0.5, 2., 2.]
+    >>> mean_tweedie_deviance(y_true, y_pred, power=1)
+    1.4260...
+    """"""
+    xp, _, device = get_namespace_and_device(y_pred)
+    y_true, sample_weight = move_to(y_true, sample_weight, xp=xp, device=device)
+    y_type, y_true, y_pred, sample_weight, _ = _check_reg_targets_with_floating_dtype(
+        y_true, y_pred, sample_weight, multioutput=None, xp=xp
+    )
+    if y_type == ""continuous-multioutput"":
+        raise ValueError(""Multioutput not supported in mean_tweedie_deviance"")
+
+    if sample_weight is not None:
+        sample_weight = column_or_1d(sample_weight)
+        sample_weight = sample_weight[:, np.newaxis]
+
+    message = f""Mean Tweedie deviance error with power={power} can only be used on ""
+    if power < 0:
+        # 'Extreme stable', y any real number, y_pred > 0
+        if xp.any(y_pred <= 0):
+            raise ValueError(message + ""strictly positive y_pred."")
+    elif power == 0:
+        # Normal, y and y_pred can be any real number
+        pass
+    elif 1 <= power < 2:
+        # Poisson and compound Poisson distribution, y >= 0, y_pred > 0
+        if xp.any(y_true < 0) or xp.any(y_pred <= 0):
+            raise ValueError(message + ""non-negative y and strictly positive y_pred."")
+    elif power >= 2:
+        # Gamma and Extreme stable distribution, y and y_pred > 0
+        if xp.any(y_true <= 0) or xp.any(y_pred <= 0):
+            raise ValueError(message + ""strictly positive y and y_pred."")
+    else:  # pragma: nocover
+        # Unreachable statement
+        raise ValueError
+
+    return _mean_tweedie_deviance(
+        y_true, y_pred, sample_weight=sample_weight, power=power
+    )",12,C,alta,scikit-learn
+generate_invalid_param_val,sklearn/utils/_param_validation.py,sklearn.utils._param_validation,766,825,"def generate_invalid_param_val(constraint):
+    """"""Return a value that does not satisfy the constraint.
+
+    Raises a NotImplementedError if there exists no invalid value for this constraint.
+
+    This is only useful for testing purpose.
+
+    Parameters
+    ----------
+    constraint : _Constraint instance
+        The constraint to generate a value for.
+
+    Returns
+    -------
+    val : object
+        A value that does not satisfy the constraint.
+    """"""
+    if isinstance(constraint, StrOptions):
+        return f""not {' or '.join(constraint.options)}""
+
+    if isinstance(constraint, MissingValues):
+        return np.array([1, 2, 3])
+
+    if isinstance(constraint, _VerboseHelper):
+        return -1
+
+    if isinstance(constraint, HasMethods):
+        return type(""HasNotMethods"", (), {})()
+
+    if isinstance(constraint, _IterablesNotString):
+        return ""a string""
+
+    if isinstance(constraint, _CVObjects):
+        return ""not a cv object""
+
+    if isinstance(constraint, Interval) and constraint.type is Integral:
+        if constraint.left is not None:
+            return constraint.left - 1
+        if constraint.right is not None:
+            return constraint.right + 1
+
+        # There's no integer outside (-inf, +inf)
+        raise NotImplementedError
+
+    if isinstance(constraint, Interval) and constraint.type in (Real, RealNotInt):
+        if constraint.left is not None:
+            return constraint.left - 1e-6
+        if constraint.right is not None:
+            return constraint.right + 1e-6
+
+        # bounds are -inf, +inf
+        if constraint.closed in (""right"", ""neither""):
+            return -np.inf
+        if constraint.closed in (""left"", ""neither""):
+            return np.inf
+
+        # interval is [-inf, +inf]
+        return np.nan
+
+    raise NotImplementedError",17,C,alta,scikit-learn
+unique_labels,sklearn/utils/multiclass.py,sklearn.utils.multiclass,41,128,"def unique_labels(*ys, ys_types=None):
+    """"""Extract an ordered array of unique labels.
+
+    We don't allow:
+        - mix of multilabel and multiclass (single label) targets
+        - mix of label indicator matrix and anything else
+          (because there are no explicit labels)
+        - mix of label indicator matrices of different sizes
+        - mix of string and integer labels
+
+    At the moment, we also don't allow ""multiclass-multioutput"" input type.
+
+    Parameters
+    ----------
+    *ys : array-likes
+        Label values.
+
+    ys_types : set, default=None
+        Set of target types of `ys` (as determined by `type_of_target`),
+        with `{""binary"", ""multiclass""}` being amended to `{""multiclass""}`.
+
+    Returns
+    -------
+    out : ndarray of shape (n_unique_labels,)
+        An ordered array of unique labels.
+
+    Examples
+    --------
+    >>> from sklearn.utils.multiclass import unique_labels
+    >>> unique_labels([3, 5, 5, 5, 7, 7])
+    array([3, 5, 7])
+    >>> unique_labels([1, 2, 3, 4], [2, 2, 3, 4])
+    array([1, 2, 3, 4])
+    >>> unique_labels([1, 2, 10], [5, 11])
+    array([ 1,  2,  5, 10, 11])
+    """"""
+    ys = attach_unique(*ys, return_tuple=True)
+    xp, is_array_api_compliant = get_namespace(*ys)
+    if len(ys) == 0:
+        raise ValueError(""No argument has been passed."")
+
+    if ys_types is None:
+        ys_types = set(type_of_target(x) for x in ys)
+        if ys_types == {""binary"", ""multiclass""}:
+            ys_types = {""multiclass""}
+
+    # Check that we don't mix label format
+    if len(ys_types) > 1:
+        raise ValueError(""Mix type of y not allowed, got types %s"" % ys_types)
+
+    # We can't have more than one value in y_type => The set is no more needed
+    label_type = ys_types.pop()
+
+    # Check consistency for the indicator format
+    if (
+        label_type == ""multilabel-indicator""
+        and len(
+            set(
+                check_array(y, accept_sparse=[""csr"", ""csc"", ""coo""]).shape[1] for y in ys
+            )
+        )
+        > 1
+    ):
+        raise ValueError(
+            ""Multi-label binary indicator input with different numbers of labels""
+        )
+
+    # Get the unique set of labels
+    _unique_labels = _FN_UNIQUE_LABELS.get(label_type, None)
+    if not _unique_labels:
+        raise ValueError(""Unknown label type: %s"" % repr(ys))
+
+    if is_array_api_compliant and not _is_numpy_namespace(xp):
+        # non-NumPy array API inputs do not allow for mixed dtypes
+        unique_ys = xp.concat([_unique_labels(y, xp=xp) for y in ys])
+        return xp.unique_values(unique_ys)
+
+    ys_labels = set(
+        chain.from_iterable((i for i in _unique_labels(y, xp=xp)) for y in ys)
+    )
+    # Check that we don't mix string type with number type
+    if len(set(isinstance(label, str) for label in ys_labels)) > 1:
+        msg_details = (
+            ""Got "" + "" and "".join([f""{xp.unique_values(y)}"" for y in ys]) + "".""
+        )
+        raise ValueError(f""Mix of label input types (string and number); {msg_details}"")
+
+    return xp.asarray(sorted(ys_labels))",18,C,alta,scikit-learn
+sparse_matmul_to_dense,sklearn/utils/sparsefuncs.py,sklearn.utils.sparsefuncs,748,808,"def sparse_matmul_to_dense(A, B, out=None):
+    """"""Compute A @ B for sparse and 2-dim A and B while returning an ndarray.
+
+    Parameters
+    ----------
+    A : sparse matrix of shape (n1, n2) and format CSC or CSR
+        Left-side input matrix.
+    B : sparse matrix of shape (n2, n3) and format CSC or CSR
+        Right-side input matrix.
+    out : ndarray of shape (n1, n3) or None
+        Optional ndarray into which the result is written.
+
+    Returns
+    -------
+    out
+        An ndarray, new created if out=None.
+    """"""
+    if not (sp.issparse(A) and A.format in (""csc"", ""csr"") and A.ndim == 2):
+        raise ValueError(""Input 'A' must be a sparse 2-dim CSC or CSR array."")
+    if not (sp.issparse(B) and B.format in (""csc"", ""csr"") and B.ndim == 2):
+        raise ValueError(""Input 'B' must be a sparse 2-dim CSC or CSR array."")
+    if A.shape[1] != B.shape[0]:
+        msg = (
+            ""Shapes must fulfil A.shape[1] == B.shape[0], ""
+            f""got {A.shape[1]} == {B.shape[0]}.""
+        )
+        raise ValueError(msg)
+    n1, n2 = A.shape
+    n3 = B.shape[1]
+    if A.dtype != B.dtype or A.dtype not in (np.float32, np.float64):
+        msg = ""Dtype of A and B must be the same, either both float32 or float64.""
+        raise ValueError(msg)
+    if out is None:
+        out = np.empty((n1, n3), dtype=A.data.dtype)
+    else:
+        if out.shape[0] != n1 or out.shape[1] != n3:
+            raise ValueError(""Shape of out must be ({n1}, {n3}), got {out.shape}."")
+        if out.dtype != A.data.dtype:
+            raise ValueError(""Dtype of out must match that of input A."")
+
+    transpose_out = False
+    if A.format == ""csc"":
+        if B.format == ""csc"":
+            # out.T = (A @ B).T = B.T @ A.T, note that A.T and B.T are csr
+            transpose_out = True
+            A, B, out = B.T, A.T, out.T
+            n1, n3 = n3, n1
+        else:
+            # It seems best to just convert to csr.
+            A = A.tocsr()
+    elif B.format == ""csc"":
+        # It seems best to just convert to csr.
+        B = B.tocsr()
+
+    csr_matmul_csr_to_dense(
+        A.data, A.indices, A.indptr, B.data, B.indices, B.indptr, out, n1, n2, n3
+    )
+    if transpose_out:
+        out = out.T
+
+    return out",18,C,alta,scikit-learn
+hamming_loss,sklearn/metrics/_classification.py,sklearn.metrics._classification,3203,3307,"def hamming_loss(y_true, y_pred, *, sample_weight=None):
+    """"""Compute the average Hamming loss.
+
+    The Hamming loss is the fraction of labels that are incorrectly predicted.
+
+    Read more in the :ref:`User Guide <hamming_loss>`.
+
+    Parameters
+    ----------
+    y_true : 1d array-like, or label indicator array / sparse matrix
+        Ground truth (correct) labels. Sparse matrix is only supported when
+        targets are of :term:`multilabel` type.
+
+    y_pred : 1d array-like, or label indicator array / sparse matrix
+        Predicted labels, as returned by a classifier. Sparse matrix is only
+        supported when targets are of :term:`multilabel` type.
+
+    sample_weight : array-like of shape (n_samples,), default=None
+        Sample weights.
+
+        .. versionadded:: 0.18
+
+    Returns
+    -------
+    loss : float
+        Returns the average Hamming loss between element of ``y_true`` and
+        ``y_pred``.
+
+    See Also
+    --------
+    accuracy_score : Compute the accuracy score. By default, the function will
+        return the fraction of correct predictions divided by the total number
+        of predictions.
+    jaccard_score : Compute the Jaccard similarity coefficient score.
+    zero_one_loss : Compute the Zero-one classification loss. By default, the
+        function will return the percentage of imperfectly predicted subsets.
+
+    Notes
+    -----
+    In multiclass classification, the Hamming loss corresponds to the Hamming
+    distance between ``y_true`` and ``y_pred`` which is equivalent to the
+    subset ``zero_one_loss`` function, when `normalize` parameter is set to
+    True.
+
+    In multilabel classification, the Hamming loss is different from the
+    subset zero-one loss. The zero-one loss considers the entire set of labels
+    for a given sample incorrect if it does not entirely match the true set of
+    labels. Hamming loss is more forgiving in that it penalizes only the
+    individual labels.
+
+    The Hamming loss is upperbounded by the subset zero-one loss, when
+    `normalize` parameter is set to True. It is always between 0 and 1,
+    lower being better.
+
+    References
+    ----------
+    .. [1] Grigorios Tsoumakas, Ioannis Katakis.
+           `Multi-Label Classification: An Overview
+           <https://people.iee.ihu.gr/~stoug/odep/papers/Multi-Label%20Classification:%20An%20Overview.pdf>`_.
+           International Journal of Data Warehousing & Mining,
+           3(3), 1-13, July-September 2007.
+
+    .. [2] `Wikipedia entry on the Hamming distance
+           <https://en.wikipedia.org/wiki/Hamming_distance>`_.
+
+    Examples
+    --------
+    >>> from sklearn.metrics import hamming_loss
+    >>> y_pred = [1, 2, 3, 4]
+    >>> y_true = [2, 2, 3, 4]
+    >>> hamming_loss(y_true, y_pred)
+    0.25
+
+    In the multilabel case with binary label indicators:
+
+    >>> import numpy as np
+    >>> hamming_loss(np.array([[0, 1], [1, 1]]), np.zeros((2, 2)))
+    0.75
+    """"""
+    y_true, y_pred = attach_unique(y_true, y_pred)
+    y_type, _, y_true, y_pred, sample_weight = _check_targets(
+        y_true, y_pred, sample_weight
+    )
+
+    xp, _, device = get_namespace_and_device(y_true, y_pred, sample_weight)
+
+    if sample_weight is None:
+        weight_average = 1.0
+    else:
+        weight_average = _average(sample_weight, xp=xp)
+
+    if y_type.startswith(""multilabel""):
+        n_differences = _count_nonzero(
+            y_true - y_pred, xp=xp, device=device, sample_weight=sample_weight
+        )
+        return float(n_differences) / (
+            y_true.shape[0] * y_true.shape[1] * weight_average
+        )
+
+    elif y_type in [""binary"", ""multiclass""]:
+        return float(
+            _average(y_true != y_pred, weights=sample_weight, normalize=True, xp=xp)
+        )
+    else:
+        raise ValueError(""{0} is not supported"".format(y_type))",4,A,baixa,scikit-learn
+sqeuclidean_row_norms,sklearn/metrics/_pairwise_distances_reduction/_dispatcher.py,sklearn.metrics._pairwise_distances_reduction._dispatcher,31,55,"def sqeuclidean_row_norms(X, num_threads):
+    """"""Compute the squared euclidean norm of the rows of X in parallel.
+
+    Parameters
+    ----------
+    X : ndarray or CSR matrix of shape (n_samples, n_features)
+        Input data. Must be c-contiguous.
+
+    num_threads : int
+        The number of OpenMP threads to use.
+
+    Returns
+    -------
+    sqeuclidean_row_norms : ndarray of shape (n_samples,)
+        Arrays containing the squared euclidean norm of each row of X.
+    """"""
+    if X.dtype == np.float64:
+        return np.asarray(_sqeuclidean_row_norms64(X, num_threads))
+    if X.dtype == np.float32:
+        return np.asarray(_sqeuclidean_row_norms32(X, num_threads))
+
+    raise ValueError(
+        ""Only float64 or float32 datasets are supported at this time, ""
+        f""got: X.dtype={X.dtype}.""
+    )",3,A,baixa,scikit-learn
+has_fit_parameter,sklearn/utils/validation.py,sklearn.utils.validation,1485,1515,"def has_fit_parameter(estimator, parameter):
+    """"""Check whether the estimator's fit method supports the given parameter.
+
+    Parameters
+    ----------
+    estimator : object
+        An estimator to inspect.
+
+    parameter : str
+        The searched parameter.
+
+    Returns
+    -------
+    is_parameter : bool
+        Whether the parameter was found to be a named parameter of the
+        estimator's fit method.
+
+    Examples
+    --------
+    >>> from sklearn.svm import SVC
+    >>> from sklearn.utils.validation import has_fit_parameter
+    >>> has_fit_parameter(SVC(), ""sample_weight"")
+    True
+    """"""
+    return (
+        # This is used during test collection in common tests. The
+        # hasattr(estimator, ""fit"") makes it so that we don't fail for an estimator
+        # that does not have a `fit` method during collection of checks. The right
+        # checks will fail later.
+        hasattr(estimator, ""fit"") and parameter in signature(estimator.fit).parameters
+    )",2,A,baixa,scikit-learn
+d2_log_loss_score,sklearn/metrics/_classification.py,sklearn.metrics._classification,3869,3980,"def d2_log_loss_score(
+    y_true, y_proba=None, *, sample_weight=None, labels=None, y_pred=""deprecated""
+):
+    """""":math:`D^2` score function, fraction of log loss explained.
+
+    Best possible score is 1.0 and it can be negative (because the model can be
+    arbitrarily worse). A model that always predicts the per-class proportions
+    of `y_true`, disregarding the input features, gets a D^2 score of 0.0.
+
+    Read more in the :ref:`User Guide <d2_score_classification>`.
+
+    .. versionadded:: 1.5
+
+    Parameters
+    ----------
+    y_true : array-like or label indicator matrix
+        The actuals labels for the n_samples samples.
+
+    y_proba : array-like of shape (n_samples, n_classes) or (n_samples,)
+        Predicted probabilities, as returned by a classifier's
+        predict_proba method. If ``y_proba.shape = (n_samples,)``
+        the probabilities provided are assumed to be that of the
+        positive class. The labels in ``y_proba`` are assumed to be
+        ordered alphabetically, as done by
+        :class:`~sklearn.preprocessing.LabelBinarizer`.
+
+        .. versionadded:: 1.9
+            `y_pred` was renamed to `y_proba`.
+
+    sample_weight : array-like of shape (n_samples,), default=None
+        Sample weights.
+
+    labels : array-like, default=None
+        If not provided, labels will be inferred from y_true. If ``labels``
+        is ``None`` and ``y_pred`` has shape (n_samples,) the labels are
+        assumed to be binary and are inferred from ``y_true``.
+
+    y_pred : array-like of shape (n_samples, n_classes) or (n_samples,)
+        Predicted probabilities, as returned by a classifier's
+        predict_proba method. If ``y_pred.shape = (n_samples,)``
+        the probabilities provided are assumed to be that of the
+        positive class. The labels in ``y_pred`` are assumed to be
+        ordered alphabetically, as done by
+        :class:`~sklearn.preprocessing.LabelBinarizer`.
+
+        .. deprecated:: 1.9
+            `y_pred` was deprecated in favor of `y_proba` in v1.9 and will
+            be removed in v1.11.
+
+    Returns
+    -------
+    d2 : float or ndarray of floats
+        The D^2 score.
+
+    Notes
+    -----
+    This is not a symmetric function.
+
+    Like R^2, D^2 score may be negative (it need not actually be the square of
+    a quantity D).
+
+    This metric is not well-defined for a single sample and will return a NaN
+    value if n_samples is less than two.
+    """"""
+    # TODO(1.11): Remove check and remove default value for `y_proba`.
+    if not (isinstance(y_pred, str) and y_pred == ""deprecated""):
+        if y_proba is not None:
+            raise ValueError(
+                ""Cannot use both `y_pred` and `y_proba`. `y_pred` is deprecated, ""
+                ""use `y_proba` instead.""
+            )
+        else:
+            warnings.warn(
+                ""`y_pred` was renamed to `y_proba` in version 1.9 and will be removed ""
+                ""in 1.11. Use `y_proba` instead."",
+                FutureWarning,
+            )
+            y_proba = y_pred
+
+    check_consistent_length(y_proba, y_true, sample_weight)
+    if _num_samples(y_proba) < 2:
+        msg = ""D^2 score is not well-defined with less than two samples.""
+        warnings.warn(msg, UndefinedMetricWarning)
+        return float(""nan"")
+
+    xp, _, device_ = get_namespace_and_device(y_proba)
+    y_proba = check_array(
+        y_proba, ensure_2d=False, dtype=supported_float_dtypes(xp, device=device_)
+    )
+    if sample_weight is not None:
+        sample_weight = move_to(sample_weight, xp=xp, device=device_)
+
+    transformed_labels, y_proba = _validate_multiclass_probabilistic_prediction(
+        y_true, y_proba, sample_weight, labels
+    )
+    xp, _ = get_namespace(y_proba, transformed_labels)
+    y_proba_null = _average(transformed_labels, axis=0, weights=sample_weight)
+    y_proba_null = xp.tile(y_proba_null, (y_proba.shape[0], 1))
+
+    numerator = _log_loss(
+        transformed_labels,
+        y_proba,
+        normalize=False,
+        sample_weight=sample_weight,
+    )
+    denominator = _log_loss(
+        transformed_labels,
+        y_proba_null,
+        normalize=False,
+        sample_weight=sample_weight,
+    )
+    return float(1 - (numerator / denominator))",6,B,media,scikit-learn
+yield_namespace_device_dtype_combinations,sklearn/utils/_array_api.py,sklearn.utils._array_api,70,118,"def yield_namespace_device_dtype_combinations(include_numpy_namespaces=True):
+    """"""Yield supported namespace, device_name, dtype_name tuples for testing.
+
+    Use this to test that an estimator works with all combinations.
+    Pass the yielded values to `_array_api_for_tests` which returns (xp, device)
+    for array allocation.
+
+    Parameters
+    ----------
+    include_numpy_namespaces : bool, default=True
+        If True, also yield numpy namespaces.
+
+    Returns
+    -------
+    array_namespace : str
+        The name of the Array API namespace.
+
+    device_name : str or None
+        The name of the device on which to allocate the arrays. Can be None to
+        indicate that the default value should be used.
+
+    dtype_name : str
+        The name of the data type to use for arrays. Can be None to indicate
+        that the default value should be used.
+    """"""
+    for array_namespace in yield_namespaces(
+        include_numpy_namespaces=include_numpy_namespaces
+    ):
+        if array_namespace == ""torch"":
+            for device_name, dtype in itertools.product(
+                (""cpu"", ""cuda"", ""xpu""), (""float64"", ""float32"")
+            ):
+                yield array_namespace, device_name, dtype
+            yield array_namespace, ""mps"", ""float32""
+
+        elif array_namespace == ""dpnp"":  # pragma: nocover
+            # XXX: add ""accelerator"" device type?
+            for device_name, dtype in itertools.product(
+                (""cpu"", ""gpu""), (""float64"", ""float32"")
+            ):
+                yield array_namespace, device_name, dtype
+
+        elif array_namespace == ""array_api_strict"":
+            # Always yield strings for consistent parametrization; _array_api_for_tests
+            # creates Device objects when needed.
+            yield array_namespace, ""CPU_DEVICE"", ""float64""
+            yield array_namespace, ""device1"", ""float32""
+        else:
+            yield array_namespace, None, None",7,B,media,scikit-learn
+check_symmetric,sklearn/utils/validation.py,sklearn.utils.validation,1518,1593,"def check_symmetric(array, *, tol=1e-10, raise_warning=True, raise_exception=False):
+    """"""Make sure that array is 2D, square and symmetric.
+
+    If the array is not symmetric, then a symmetrized version is returned.
+    Optionally, a warning or exception is raised if the matrix is not
+    symmetric.
+
+    Parameters
+    ----------
+    array : {ndarray, sparse matrix}
+        Input object to check / convert. Must be two-dimensional and square,
+        otherwise a ValueError will be raised.
+
+    tol : float, default=1e-10
+        Absolute tolerance for equivalence of arrays. Default = 1E-10.
+
+    raise_warning : bool, default=True
+        If True then raise a warning if conversion is required.
+
+    raise_exception : bool, default=False
+        If True then raise an exception if array is not symmetric.
+
+    Returns
+    -------
+    array_sym : {ndarray, sparse matrix}
+        Symmetrized version of the input array, i.e. the average of array
+        and array.transpose(). If sparse, then duplicate entries are first
+        summed and zeros are eliminated.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from sklearn.utils.validation import check_symmetric
+    >>> symmetric_array = np.array([[0, 1, 2], [1, 0, 1], [2, 1, 0]])
+    >>> check_symmetric(symmetric_array)
+    array([[0, 1, 2],
+           [1, 0, 1],
+           [2, 1, 0]])
+    >>> from scipy.sparse import csr_array
+    >>> sparse_symmetric_array = csr_array(symmetric_array)
+    >>> check_symmetric(sparse_symmetric_array)
+    <Compressed Sparse Row sparse array of dtype 'int64'
+        with 6 stored elements and shape (3, 3)>
+    """"""
+    if (array.ndim != 2) or (array.shape[0] != array.shape[1]):
+        raise ValueError(
+            ""array must be 2-dimensional and square. shape = {0}"".format(array.shape)
+        )
+
+    if sp.issparse(array):
+        diff = array - array.T
+        # only csr, csc, and coo have `data` attribute
+        if diff.format not in [""csr"", ""csc"", ""coo""]:
+            diff = diff.tocsr()
+        symmetric = np.all(abs(diff.data) < tol)
+    else:
+        symmetric = np.allclose(array, array.T, atol=tol)
+
+    if not symmetric:
+        if raise_exception:
+            raise ValueError(""Array must be symmetric"")
+        if raise_warning:
+            warnings.warn(
+                (
+                    ""Array is not symmetric, and will be converted ""
+                    ""to symmetric by average with its transpose.""
+                ),
+                stacklevel=2,
+            )
+        if sp.issparse(array):
+            conversion = ""to"" + array.format
+            array = getattr(0.5 * (array + array.T), conversion)()
+        else:
+            array = 0.5 * (array + array.T)
+
+    return array",9,B,media,scikit-learn
