@@ -11,10 +11,13 @@ import numpy as np
 import pandas as pd
 
 from csv_columns import prepare_csv_for_save, standardize_function_column
-from dataset_config import add_dataset_argument, resolve_dataset
+from dataset_config import RESULTS_DIR, add_dataset_argument, resolve_dataset
 
 PLOTS_DIR = Path(".")
 FIG_DPI = 150
+SCATTER_2X2_DPI = 300
+SCORE_AXIS_MAX = 10.0
+
 MERGE_KEYS = ("function_name", "test_file")
 COMPLEXITY_ORDER = ("baixa", "media", "alta")
 
@@ -86,6 +89,74 @@ def _build_pair(gpt_df: pd.DataFrame, claude_df: pd.DataFrame, *, generator: str
     merged["overall_score_claude"] = pd.to_numeric(merged["overall_score_claude"], errors="coerce")
     merged["generator"] = generator
     return merged
+
+
+def plot_cross_evaluation_2x2_by_function(df: pd.DataFrame, out_dir: Path) -> None:
+    """
+    Figura 2x2: overall_score por índice de função (1..N) em cada cenário da matriz.
+    A→B: testes gerados por A, avaliados por B.
+  """
+    panels: list[tuple[str, str]] = [
+        ("overall_score_gpt_on_gpt", "GPT→GPT"),
+        ("overall_score_claude_on_gpt", "GPT→Claude"),
+        ("overall_score_gpt_on_claude", "Claude→GPT"),
+        ("overall_score_claude_on_claude", "Claude→Claude"),
+    ]
+
+    missing = [col for col, _ in panels if col not in df.columns]
+    if missing:
+        print(
+            "  Ignorado overall_score_cross_evaluation_2x2_by_function.png: "
+            f"colunas ausentes: {', '.join(missing)}"
+        )
+        return
+
+    n = len(df)
+    if n == 0:
+        print("  Ignorado overall_score_cross_evaluation_2x2_by_function.png: dataframe vazio.")
+        return
+
+    x_indices = np.arange(1, n + 1)
+
+    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+    for ax, (score_col, title) in zip(axes.flatten(), panels):
+        scores = pd.to_numeric(df[score_col], errors="coerce")
+        ax.scatter(
+            x_indices,
+            scores,
+            alpha=0.85,
+            s=60,
+            c="#2980b9",
+            edgecolors="white",
+            linewidths=0.5,
+        )
+
+        if scores.notna().any():
+            mean_val = float(scores.mean())
+            ax.axhline(
+                mean_val,
+                linestyle="--",
+                color="#c0392b",
+                linewidth=1.5,
+                label=f"Média = {mean_val:.2f}",
+            )
+            ax.legend(loc="best", fontsize=9)
+        else:
+            ax.text(0.5, 0.5, "Sem dados", transform=ax.transAxes, ha="center", va="center")
+
+        ax.set_xlim(0.5, n + 0.5)
+        ax.set_ylim(0, SCORE_AXIS_MAX)
+        ax.set_title(title, fontsize=11, fontweight="bold")
+        ax.set_xlabel("Índice da função")
+        ax.set_ylabel("overall_score")
+        ax.grid(True, alpha=0.3)
+
+    fig.tight_layout()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    output_path = out_dir / "overall_score_cross_evaluation_2x2_by_function.png"
+    fig.savefig(output_path, dpi=SCATTER_2X2_DPI, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  Salvo: {output_path.name}")
 
 
 def _plot_scatter(df: pd.DataFrame, *, filename: str) -> None:
@@ -280,6 +351,18 @@ def main() -> None:
     cross_df["complexity_level"] = cross_df["complexity_level"].apply(normalize_complexity_level)
     _plot_cross_mean(cross_df)
     _plot_cross_by_complexity(cross_df)
+
+    final_path = cfg.result_csv("resultados_finais")
+    if final_path.exists():
+        df_final = pd.read_csv(final_path)
+        plot_cross_evaluation_2x2_by_function(df_final, PLOTS_DIR)
+        graficos_dir = RESULTS_DIR / "graficos" / cfg.key
+        plot_cross_evaluation_2x2_by_function(df_final, graficos_dir)
+    else:
+        print(
+            f"Aviso: {final_path.name} não encontrado — "
+            "overall_score_cross_evaluation_2x2_by_function.png não gerado."
+        )
 
     write_summary(pair_gpt_tests, pair_claude_tests, output_summary)
     print(f"Resumo: {output_summary}")
