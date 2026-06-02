@@ -16,13 +16,13 @@ from dataset_config import (
 BASE_DIR = Path(__file__).resolve().parent.parent
 BASE_REPO_PATH = BASE_DIR / "repos" / "scikit-learn"
 OUTPUT_CSV_PATH = (
-    BASE_DIR / "data" / "selected_functions" / "sample_real_project_10.csv"
+    BASE_DIR / "data" / "selected_functions" / "sample_real_project_15.csv"
 )
 
 REPOSITORY_NAME = "scikit-learn"
 RANDOM_STATE = 42
 
-SAMPLE_COUNTS = {"baixa": 3, "media": 3, "alta": 4}
+SAMPLE_COUNTS = {"baixa": 5, "media": 5, "alta": 5}
 
 PREFERRED_PATH_PREFIXES = (
     "sklearn/metrics/",

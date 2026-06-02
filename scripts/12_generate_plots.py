@@ -71,7 +71,51 @@ def _status_colors(labels: list[str]) -> list[str]:
     return [palette.get(lbl, "#95a5a6") for lbl in labels]
 
 
-def plot_01_execucao_por_status(df_cov: pd.DataFrame) -> None:
+def _is_execution_ok(status: object) -> bool:
+    return str(status).strip().lower() == "ok"
+
+
+def _is_execution_failed(status: object) -> bool:
+    return str(status).strip().lower() in {"tests_failed", "failed"}
+
+
+def plot_01_execucao_por_status(df_cov: pd.DataFrame, *, cfg=None) -> None:
+    """Barras agrupadas GPT vs Claude (OK e FAILED), com fallback para um único gerador."""
+    import numpy as np
+
+    frames: dict[str, pd.DataFrame] = {"GPT": df_cov}
+    if cfg is not None:
+        claude_path = cfg.result_csv("cobertura_testes_gerados_claude")
+        if claude_path.exists():
+            frames["Claude"] = _prepare_coverage(pd.read_csv(claude_path))
+
+    if len(frames) > 1:
+        labels = list(frames.keys())
+        x = np.arange(len(labels))
+        width = 0.35
+        ok_vals = [int(frames[l]["execution_status"].map(_is_execution_ok).sum()) for l in labels]
+        fail_vals = [int(frames[l]["execution_status"].map(_is_execution_failed).sum()) for l in labels]
+
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ok_bars = ax.bar(x - width / 2, ok_vals, width, label="OK", color="#2ecc71", edgecolor="#333333", linewidth=0.6)
+        fail_bars = ax.bar(
+            x + width / 2, fail_vals, width, label="FAILED", color="#e74c3c", edgecolor="#333333", linewidth=0.6
+        )
+        ax.set_xlabel("Modelo gerador")
+        ax.set_ylabel("Quantidade de testes")
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels)
+        ax.legend()
+        for bars in (ok_bars, fail_bars):
+            for bar in bars:
+                h = bar.get_height()
+                ax.annotate(f"{int(h)}", xy=(bar.get_x() + bar.get_width() / 2, h), ha="center", va="bottom", fontsize=9)
+        ymax = max(ok_vals + fail_vals + [1])
+        ax.set_ylim(0, ymax * 1.15)
+        fig.tight_layout()
+        _save_fig(OUTPUT_DIR / "01_execucao_por_status.png")
+        return
+
     counts = df_cov["execution_status"].value_counts()
     known = [s for s in STATUS_ORDER if s in counts.index]
     others = [s for s in counts.index if s not in STATUS_ORDER]
@@ -390,7 +434,7 @@ def main() -> None:
         print(f"Aviso: {input_strength.name} não encontrado — gráficos 05, 06 e 07 serão omitidos.")
 
     print("\nGráficos:")
-    plot_01_execucao_por_status(df_cov)
+    plot_01_execucao_por_status(df_cov, cfg=cfg)
     plot_02_cobertura_media_por_complexidade(df_cov)
 
     if df_eval is not None:

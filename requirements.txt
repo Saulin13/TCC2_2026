@@ -3,6 +3,7 @@ pytest
 coverage
 pandas
 matplotlib
+scipy
 openpyxl
 python-dotenv
 anthropic

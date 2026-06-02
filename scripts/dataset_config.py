@@ -86,7 +86,7 @@ _DATASETS: dict[str, DatasetConfig] = {
     DATASET_REAL: DatasetConfig(
         key=DATASET_REAL,
         suffix="_real",
-        sample_filename="sample_real_project_10.csv",
+        sample_filename="sample_real_project_15.csv",
         repo_relative=Path("repos/scikit-learn"),
         pilot_sample_filename=None,
     ),

@@ -29,8 +29,10 @@ FINAL_COLUMNS = [
     "assertion_density",
     "execution_success_rate",
     "test_strength_score",
-    "overall_score_gpt",
-    "overall_score_claude",
+    "overall_score_gpt_on_gpt",
+    "overall_score_claude_on_gpt",
+    "overall_score_gpt_on_claude",
+    "overall_score_claude_on_claude",
 ]
 
 COMPLEXITY_ORDER = ("baixa", "media", "alta")
@@ -172,8 +174,10 @@ def consolidate(cfg: DatasetConfig) -> pd.DataFrame | None:
     input_density = cfg.result_csv("metrica_densidade_asserts")
     input_success = cfg.result_csv("metrica_sucesso_execucao")
     input_strength = cfg.result_csv("forca_heuristica_testes")
-    input_eval_gpt = cfg.result_csv("avaliacao_gpt_sobre_testes_gpt")
-    input_eval_claude = cfg.result_csv("avaliacao_claude_sobre_testes_gpt")
+    input_eval_gpt_on_gpt = cfg.result_csv("avaliacao_gpt_sobre_testes_gpt")
+    input_eval_claude_on_gpt = cfg.result_csv("avaliacao_claude_sobre_testes_gpt")
+    input_eval_gpt_on_claude = cfg.result_csv("avaliacao_gpt_sobre_testes_claude")
+    input_eval_claude_on_claude = cfg.result_csv("avaliacao_claude_sobre_testes_claude")
 
     print("Carregando CSVs para consolidação...\n")
 
@@ -219,31 +223,80 @@ def consolidate(cfg: DatasetConfig) -> pd.DataFrame | None:
         label="test_strength_score",
     )
 
-    df_gpt = _load_and_standardize(input_eval_gpt, "df_gpt", required=False)
-    if df_gpt is not None:
+    df_gpt_on_gpt = _load_and_standardize(input_eval_gpt_on_gpt, "df_gpt_on_gpt", required=False)
+    if df_gpt_on_gpt is not None:
         final = _merge_logged(
             final,
-            _prepare_eval(df_gpt, "overall_score_gpt", input_eval_gpt.name),
+            _prepare_eval(df_gpt_on_gpt, "overall_score_gpt_on_gpt", input_eval_gpt_on_gpt.name),
             on=list(MERGE_KEYS),
             how="left",
-            label="avaliação GPT",
+            label="avaliacao GPT_on_GPT",
         )
     else:
-        final["overall_score_gpt"] = pd.NA
+        final["overall_score_gpt_on_gpt"] = pd.NA
 
-    df_claude = _load_and_standardize(input_eval_claude, "df_claude", required=False)
-    if df_claude is not None:
+    df_claude_on_gpt = _load_and_standardize(input_eval_claude_on_gpt, "df_claude_on_gpt", required=False)
+    if df_claude_on_gpt is not None:
         final = _merge_logged(
             final,
-            _prepare_eval(df_claude, "overall_score_claude", input_eval_claude.name),
+            _prepare_eval(
+                df_claude_on_gpt,
+                "overall_score_claude_on_gpt",
+                input_eval_claude_on_gpt.name,
+            ),
             on=list(MERGE_KEYS),
             how="left",
-            label="avaliação Claude",
+            label="avaliacao Claude_on_GPT",
         )
     else:
-        final["overall_score_claude"] = pd.NA
+        final["overall_score_claude_on_gpt"] = pd.NA
 
-    for col in ("overall_score_gpt", "overall_score_claude"):
+    df_gpt_on_claude = _load_and_standardize(
+        input_eval_gpt_on_claude,
+        "df_gpt_on_claude",
+        required=False,
+    )
+    if df_gpt_on_claude is not None:
+        final = _merge_logged(
+            final,
+            _prepare_eval(
+                df_gpt_on_claude,
+                "overall_score_gpt_on_claude",
+                input_eval_gpt_on_claude.name,
+            )[["function_name", "overall_score_gpt_on_claude"]].drop_duplicates(subset=["function_name"]),
+            on="function_name",
+            how="left",
+            label="avaliacao GPT_on_Claude",
+        )
+    else:
+        final["overall_score_gpt_on_claude"] = pd.NA
+
+    df_claude_on_claude = _load_and_standardize(
+        input_eval_claude_on_claude,
+        "df_claude_on_claude",
+        required=False,
+    )
+    if df_claude_on_claude is not None:
+        final = _merge_logged(
+            final,
+            _prepare_eval(
+                df_claude_on_claude,
+                "overall_score_claude_on_claude",
+                input_eval_claude_on_claude.name,
+            )[["function_name", "overall_score_claude_on_claude"]].drop_duplicates(subset=["function_name"]),
+            on="function_name",
+            how="left",
+            label="avaliacao Claude_on_Claude",
+        )
+    else:
+        final["overall_score_claude_on_claude"] = pd.NA
+
+    for col in (
+        "overall_score_gpt_on_gpt",
+        "overall_score_claude_on_gpt",
+        "overall_score_gpt_on_claude",
+        "overall_score_claude_on_claude",
+    ):
         if col not in final.columns:
             final[col] = pd.NA
 
@@ -276,18 +329,16 @@ def write_summary(df: pd.DataFrame, output_summary: Path, *, dataset_label: str)
         f"  execution_success_rate: {df['execution_success_rate'].mean():.2f}",
     ]
 
-    if df["overall_score_gpt"].notna().any():
-        lines.append(f"  overall_score_gpt: {df['overall_score_gpt'].mean():.2f} (n={int(df['overall_score_gpt'].notna().sum())})")
-    else:
-        lines.append("  overall_score_gpt: (não disponível)")
-
-    if df["overall_score_claude"].notna().any():
-        lines.append(
-            f"  overall_score_claude: {df['overall_score_claude'].mean():.2f} "
-            f"(n={int(df['overall_score_claude'].notna().sum())})"
-        )
-    else:
-        lines.append("  overall_score_claude: (não disponível)")
+    for col in (
+        "overall_score_gpt_on_gpt",
+        "overall_score_claude_on_gpt",
+        "overall_score_gpt_on_claude",
+        "overall_score_claude_on_claude",
+    ):
+        if df[col].notna().any():
+            lines.append(f"  {col}: {df[col].mean():.2f} (n={int(df[col].notna().sum())})")
+        else:
+            lines.append(f"  {col}: (não disponível)")
 
     lines.append("")
     complexity_counts = df["complexity_level"].value_counts()
@@ -300,19 +351,18 @@ def write_summary(df: pd.DataFrame, output_summary: Path, *, dataset_label: str)
     lines.append("")
     lines.extend(_format_distribution(df["execution_status"].value_counts(), "Distribuição por status de execução"))
 
-    if df["overall_score_gpt"].notna().any():
+    for col in (
+        "overall_score_gpt_on_gpt",
+        "overall_score_claude_on_gpt",
+        "overall_score_gpt_on_claude",
+        "overall_score_claude_on_claude",
+    ):
+        if not df[col].notna().any():
+            continue
         lines.append("")
-        lines.append("Média overall_score_gpt por complexidade:")
+        lines.append(f"Média {col} por complexidade:")
         for level in COMPLEXITY_ORDER:
-            sub = df[df["complexity_level"] == level]["overall_score_gpt"].dropna()
-            if not sub.empty:
-                lines.append(f"  {level}: {sub.mean():.2f} (n={len(sub)})")
-
-    if df["overall_score_claude"].notna().any():
-        lines.append("")
-        lines.append("Média overall_score_claude por complexidade:")
-        for level in COMPLEXITY_ORDER:
-            sub = df[df["complexity_level"] == level]["overall_score_claude"].dropna()
+            sub = df[df["complexity_level"] == level][col].dropna()
             if not sub.empty:
                 lines.append(f"  {level}: {sub.mean():.2f} (n={len(sub)})")
 

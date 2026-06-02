@@ -27,7 +27,7 @@ Executar **antes** da pipeline principal, quando ainda não existem os CSVs de a
 | 1 | `01_extract_functions.py` | `data/raw/functions_extracted.csv` |
 | 2 | `02_measure_complexity.py` | `data/raw/functions_with_complexity.csv` |
 | 3a | `03_select_sample.py` | `data/selected_functions/sample_thealgorithms_60.csv` |
-| 3b | `03b_select_real_project_sample.py` | `data/selected_functions/sample_real_project_10.csv` |
+| 3b | `03b_select_real_project_sample.py` | `data/selected_functions/sample_real_project_15.csv` |
 
 Requisitos: clones em `repos/Python` (TheAlgorithms) e `repos/scikit-learn`.
 
@@ -46,9 +46,11 @@ Para cada `--dataset` escolhido, a ordem é:
 9. `06_evaluate_tests_llm.py` — GPT avalia testes GPT  
 10. `06b_evaluate_tests_claude.py` — Claude avalia testes GPT  
 11. `06c_evaluate_gpt_on_claude.py` — GPT avalia testes Claude  
-12. `13_compare_llm_evaluators.py` — compara avaliadores  
-13. `11_consolidate_results.py` — tabela final consolidada  
-14. `12_generate_plots.py` — gráficos principais do dataset  
+12. `06d_evaluate_claude_on_claude.py` — Claude avalia testes Claude  
+13. `13_compare_llm_evaluators.py` — compara avaliadores na matriz 2x2  
+14. `11_consolidate_results.py` — tabela final consolidada  
+15. `12_generate_plots.py` — gráficos principais do dataset  
+16. `15_statistical_analysis.py` — estatísticas, correlações e gráficos em `data/results/graficos/`  
 
 ---
 
@@ -64,7 +66,7 @@ python scripts/00_run_pipeline.py --dataset thealgorithms
 
 ### scikit-learn (`real`)
 
-Amostra: `data/selected_functions/sample_real_project_10.csv` (10 funções).
+Amostra: `data/selected_functions/sample_real_project_15.csv` (15 funções; 5 baixa, 5 média, 5 alta).
 
 > **Atenção:** no dataset real, a cobertura pode ser limitada porque os testes executam contra o pacote `sklearn` instalado via pip, não necessariamente contra o clone em `repos/scikit-learn`.
 
@@ -85,7 +87,7 @@ python scripts/00_run_pipeline.py --dataset all
 | Flag | Efeito |
 |------|--------|
 | `--skip-generation` | Pula etapas 04 e 04b (reutiliza testes já gerados) |
-| `--skip-evaluation` | Pula avaliações por LLM e comparação (06, 06b, 06c, 13) |
+| `--skip-evaluation` | Pula avaliações por LLM e comparação (06, 06b, 06c, 06d, 13) |
 | `--only-plots` | Apenas consolidação (11) e gráficos (12) |
 
 Exemplo para reprocessar métricas e gráficos sem chamar APIs:
@@ -103,7 +105,7 @@ python scripts/00_run_pipeline.py --dataset all --skip-generation --skip-evaluat
 | Dataset | Arquivo |
 |---------|---------|
 | TheAlgorithms | `data/selected_functions/sample_thealgorithms_60.csv` |
-| scikit-learn | `data/selected_functions/sample_real_project_10.csv` |
+| scikit-learn | `data/selected_functions/sample_real_project_15.csv` |
 
 ### Testes gerados
 
@@ -161,7 +163,7 @@ Exemplos:
 | Classificação cobertura | cobertura GPT | `classificacao_cobertura_<dataset>.csv`, `resumo_classificacao_cobertura_<dataset>.txt` |
 | Métricas 08–10 | cobertura / avaliação | `metrica_densidade_asserts_*`, `metrica_sucesso_execucao_*`, `forca_heuristica_testes_*` |
 | Avaliações LLM | cobertura, testes | `avaliacao_gpt_sobre_testes_gpt_*`, `avaliacao_claude_sobre_testes_gpt_*`, `avaliacao_gpt_sobre_testes_claude_*` |
-| Comparação avaliadores | avaliações GPT e Claude | `comparacao_avaliadores_gpt_claude_*`, gráficos 08–16 em `plots/<dataset>/` |
+| Comparação avaliadores | avaliações GPT e Claude nos dois geradores | `comparacao_avaliadores_gpt_claude_*`, gráficos de cross-evaluation em `plots/<dataset>/` |
 | Consolidação | métricas intermediárias | **`resultados_finais_<dataset>.csv`**, **`resumo_resultados_finais_<dataset>.txt`** |
 | Gráficos finais | cobertura, avaliação, força heurística | PNGs 01–07 em `plots/<dataset>/`, `summary_metrics.csv` |
 
@@ -181,19 +183,36 @@ Exemplos:
 | `06_test_strength_vs_coverage.png` | Força heurística × cobertura |
 | `07_test_strength_vs_llm_score.png` | Força heurística × nota LLM |
 
-### Gerados por `13_compare_llm_evaluators.py` (comparação GPT × Claude)
+### Gerados por `13_compare_llm_evaluators.py` (comparação GPT × Claude, matriz 2x2)
 
 | Arquivo | Conteúdo |
 |---------|----------|
-| `08_gpt_vs_claude_overall_score.png` | Notas overall lado a lado |
-| `09_media_notas_por_avaliador.png` | Médias por avaliador |
-| `10_diferenca_notas_por_funcao.png` | Diferença de notas por função |
-| `11_media_notas_avaliador_por_complexidade.png` | Médias por avaliador e complexidade |
-| `12_gpt_vs_claude_diagonal.png` | Dispersão com diagonal de referência |
-| `13_diferenca_notas_distribuicao.png` | Histograma das diferenças |
-| `14_boxplot_gpt_vs_claude.png` | Boxplot das notas |
-| `15_cobertura_vs_avaliadores.png` | Cobertura × notas dos dois avaliadores |
-| `16_avaliador_por_complexidade.png` | Comparativo por complexidade |
+| `overall_score_gpt_tests_gpt_vs_claude.png` | Dispersão GPT→GPT vs GPT→Claude (`y=x`) |
+| `overall_score_claude_tests_gpt_vs_claude.png` | Dispersão Claude→GPT vs Claude→Claude (`y=x`) |
+| `overall_score_cross_evaluation_mean.png` | Média por cenário (GPT→GPT, GPT→Claude, Claude→GPT, Claude→Claude) |
+| `overall_score_cross_evaluation_by_complexity.png` | Média por complexidade e cenário da matriz 2x2 |
+
+### Diagnóstico de execução/cobertura (dataset real)
+
+Arquivos gerados por `05_run_tests.py`:
+
+- `data/results/real/test_execution_debug.csv` (consolidado GPT + Claude)
+- `data/results/real/test_execution_debug_gpt.csv`
+- `data/results/real/test_execution_debug_claude.csv`
+
+Colunas-chave incluem: `function_name`, `test_file`, `source_file`, `module_path`,
+`execution_status`, `return_code`, `error_type`, `error_message`, `coverage_percent`,
+`coverage_status`, `coverage_return_code`.
+
+### Análise estatística (`15_statistical_analysis.py`)
+
+| Arquivo | Conteúdo |
+|---------|----------|
+| `data/results/summary_statistics.csv` | Métricas agregadas por dataset e gerador (GPT / Claude) |
+| `data/results/correlation_results.csv` | Pearson e Spearman entre pares de variáveis |
+| `data/results/graficos/<dataset>/` | Heatmap, dispersões com tendência, status OK/FAILED agrupado |
+
+O gráfico `01_execucao_por_status.png` (em `plots/<dataset>/`) compara GPT e Claude com barras agrupadas OK vs FAILED.
 
 ---
 

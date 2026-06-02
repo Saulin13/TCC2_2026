@@ -39,19 +39,21 @@ prompts/           # Templates de geração e avaliação
 | `01_extract_functions.py` | Extrai funções Python do repositório TheAlgorithms | Preparação inicial, antes da amostra de 60 funções |
 | `02_measure_complexity.py` | Calcula complexidade ciclomática (Radon) | Após extração; alimenta a seleção de amostra |
 | `03_select_sample.py` | Seleciona 60 funções balanceadas por complexidade | Preparação do dataset **thealgorithms** |
-| `03b_select_real_project_sample.py` | Seleciona 10 funções do scikit-learn | Preparação do dataset **real** |
+| `03b_select_real_project_sample.py` | Seleciona 15 funções do scikit-learn (5 por complexidade) | Preparação do dataset **real** |
 | `04_generate_tests_gpt.py` | Gera testes com GPT-4o | Etapa da pipeline ou execução isolada com `--dataset` |
 | `04b_generate_tests_claude.py` | Gera testes com Claude | Idem, gerador Claude |
-| `05_run_tests.py` | Executa pytest e mede cobertura | Após geração; requer `--generator gpt\|claude` |
+| `05_run_tests.py` | Executa pytest e mede cobertura real via `coverage.py` | Após geração; requer `--generator gpt\|claude`; gera também `test_execution_debug*.csv` |
 | `06_evaluate_tests_llm.py` | GPT avalia qualidade dos testes GPT | Pipeline ou reavaliação isolada |
 | `06b_evaluate_tests_claude.py` | Claude avalia testes GPT | Comparação entre avaliadores |
 | `06c_evaluate_gpt_on_claude.py` | GPT avalia testes gerados pelo Claude | Avaliação cruzada de geradores |
+| `06d_evaluate_claude_on_claude.py` | Claude avalia testes gerados pelo Claude | Completa matriz 2x2 de avaliação cruzada |
 | `08_calculate_assertion_density.py` | Métrica de densidade de asserts | Após execução dos testes |
 | `09_calculate_execution_success.py` | Métrica de sucesso de execução | Após avaliação GPT (usa categorias da avaliação) |
 | `10_calculate_test_strength.py` | `test_strength_score` heurístico | Após cobertura; não é mutation testing |
-| `11_consolidate_results.py` | Une métricas em `resultados_finais_*.csv` | Penúltima etapa da pipeline |
+| `11_consolidate_results.py` | Une métricas em `resultados_finais_*.csv` | Penúltima etapa; inclui `overall_score` dos 4 cenários (GPT→GPT, GPT→Claude, Claude→GPT, Claude→Claude) |
 | `12_generate_plots.py` | Gráficos 01–07 do experimento | Última etapa analítica por dataset |
-| `13_compare_llm_evaluators.py` | Compara GPT vs Claude e gráficos 08–16 | Após avaliações; gera `comparacao_avaliadores_*` |
+| `13_compare_llm_evaluators.py` | Compara GPT vs Claude nos dois geradores (GPT e Claude) | Após avaliações; gera gráficos de dispersão por gerador e médias da matriz 2x2 |
+| `15_statistical_analysis.py` | Estatísticas, correlações (Pearson/Spearman) e gráficos avançados | Gera `summary_statistics.csv`, `correlation_results.csv` e PNGs em `data/results/graficos/` |
 | `14_classify_coverage.py` | Classifica cobertura em faixas (baixa/média/alta) | Substitui o script legado `17_classificar_cobertura.py` |
 | `dataset_config.py` | Configuração de caminhos por dataset | Importado pelos scripts; não executar diretamente |
 | `csv_columns.py` | Padronização de colunas CSV | Importado pelos scripts; não executar diretamente |
@@ -62,7 +64,7 @@ prompts/           # Templates de geração e avaliação
 | Chave | Repositório | Amostra |
 |-------|-------------|---------|
 | `thealgorithms` | TheAlgorithms/Python | 60 funções |
-| `real` | scikit-learn | 10 funções |
+| `real` | scikit-learn | 15 funções (5 baixa, 5 média, 5 alta) |
 | `all` | Ambos, em sequência | — |
 
 ## Scripts obsoletos / duplicados

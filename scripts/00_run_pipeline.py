@@ -141,6 +141,14 @@ def _build_steps(
         ),
         (
             PipelineStep(
+                "Avaliação Claude sobre testes Claude",
+                "06d_evaluate_claude_on_claude.py",
+                ds_args,
+            ),
+            only_plots or skip_evaluation,
+        ),
+        (
+            PipelineStep(
                 "Comparação dos avaliadores",
                 "13_compare_llm_evaluators.py",
                 ds_args,
@@ -159,6 +167,14 @@ def _build_steps(
             PipelineStep(
                 "Geração dos gráficos",
                 "12_generate_plots.py",
+                ds_args,
+            ),
+            False,
+        ),
+        (
+            PipelineStep(
+                "Análise estatística e gráficos avançados",
+                "15_statistical_analysis.py",
                 ds_args,
             ),
             False,
@@ -300,7 +316,7 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help=(
             "Dataset a processar: thealgorithms (sample_thealgorithms_60.csv), "
-            "real (sample_real_project_10.csv) ou all (ambos, nessa ordem)."
+            "real (sample_real_project_15.csv) ou all (ambos, nessa ordem)."
         ),
     )
     parser.add_argument(
