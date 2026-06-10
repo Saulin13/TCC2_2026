@@ -6,10 +6,12 @@ Usa test_strength_score como métrica heurística complementar (não mutation te
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import unicodedata
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
 from dataset_config import add_dataset_argument, resolve_dataset
@@ -76,18 +78,81 @@ def _is_execution_ok(status: object) -> bool:
 
 
 def _is_execution_failed(status: object) -> bool:
-    return str(status).strip().lower() in {"tests_failed", "failed"}
+    return not _is_execution_ok(status)
+
+
+def _load_coverage_frames(df_cov: pd.DataFrame, *, cfg) -> dict[str, pd.DataFrame]:
+    frames: dict[str, pd.DataFrame] = {"GPT": df_cov}
+    claude_path = cfg.result_csv("cobertura_testes_gerados_claude")
+    if claude_path.exists():
+        frames["Claude"] = _prepare_coverage(pd.read_csv(claude_path))
+    return frames
+
+
+def _strength_module():
+    path = Path(__file__).resolve().parent / "10_calculate_test_strength.py"
+    spec = importlib.util.spec_from_file_location("calculate_test_strength", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def _build_strength_from_coverage(df_cov: pd.DataFrame) -> pd.DataFrame:
+    strength = _strength_module()
+    rows: list[dict[str, object]] = []
+    for _, cov_row in df_cov.iterrows():
+        test_path = strength._resolve_test_path(cov_row["test_file"])
+        metrics = strength.analyze_test_file(test_path)
+        coverage = float(cov_row["coverage_percent"]) if pd.notna(cov_row["coverage_percent"]) else 0.0
+        passed = _parse_passed(cov_row["passed"])
+        status = str(cov_row.get("execution_status", ""))
+        score = strength.compute_test_strength_score(
+            coverage_percent=coverage,
+            assert_count=int(metrics["assert_count"]),
+            test_function_count=int(metrics["test_function_count"]),
+            edge_case_count=int(metrics["edge_case_count"]),
+            uses_pytest_raises=bool(metrics["uses_pytest_raises"]),
+            execution_status=status,
+            passed=passed,
+        )
+        rows.append(
+            {
+                "function_name": cov_row["function_name"],
+                "complexity_level": normalize_complexity_level(cov_row.get("complexity_level")),
+                "test_strength_score": score,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _load_strength_frames(df_cov: pd.DataFrame, df_str: pd.DataFrame | None, *, cfg) -> pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+    if df_str is not None and not df_str.empty:
+        gpt = df_str.copy()
+        gpt["complexity_level"] = gpt["complexity_level"].apply(normalize_complexity_level)
+        gpt["test_strength_score"] = pd.to_numeric(gpt["test_strength_score"], errors="coerce")
+        gpt["generator"] = "GPT"
+        frames.append(gpt[["complexity_level", "test_strength_score", "generator"]])
+
+    claude_path = cfg.result_csv("cobertura_testes_gerados_claude")
+    if claude_path.exists():
+        claude_cov = _prepare_coverage(pd.read_csv(claude_path))
+        claude = _build_strength_from_coverage(claude_cov)
+        claude["generator"] = "Claude"
+        frames.append(claude[["complexity_level", "test_strength_score", "generator"]])
+
+    if not frames:
+        return pd.DataFrame(columns=["complexity_level", "test_strength_score", "generator"])
+    return pd.concat(frames, ignore_index=True)
 
 
 def plot_01_execucao_por_status(df_cov: pd.DataFrame, *, cfg=None) -> None:
     """Barras agrupadas GPT vs Claude (OK e FAILED), com fallback para um único gerador."""
-    import numpy as np
-
-    frames: dict[str, pd.DataFrame] = {"GPT": df_cov}
-    if cfg is not None:
-        claude_path = cfg.result_csv("cobertura_testes_gerados_claude")
-        if claude_path.exists():
-            frames["Claude"] = _prepare_coverage(pd.read_csv(claude_path))
+    if cfg is None:
+        frames = {"GPT": df_cov}
+    else:
+        frames = _load_coverage_frames(df_cov, cfg=cfg)
 
     if len(frames) > 1:
         labels = list(frames.keys())
@@ -141,42 +206,119 @@ def plot_01_execucao_por_status(df_cov: pd.DataFrame, *, cfg=None) -> None:
     _save_fig(OUTPUT_DIR / "01_execucao_por_status.png")
 
 
-def plot_02_cobertura_media_por_complexidade(df_cov: pd.DataFrame) -> None:
-    means = (
-        df_cov.groupby("complexity_level", observed=True)["coverage_percent"]
-        .mean()
-        .reindex(COMPLEXITY_ORDER)
-        .dropna()
-    )
-    labels = list(means.index)
-    values = means.values
+def plot_02_cobertura_media_por_complexidade(df_cov: pd.DataFrame, *, cfg=None) -> None:
+    if cfg is None:
+        frames = {"GPT": df_cov}
+    else:
+        frames = _load_coverage_frames(df_cov, cfg=cfg)
 
-    fig, ax = plt.subplots(figsize=(7, 5))
-    bars = ax.bar(labels, values, color=["#3498db", "#9b59b6", "#e67e22"][: len(labels)])
+    levels = [lvl for lvl in COMPLEXITY_ORDER if any(lvl in f["complexity_level"].values for f in frames.values())]
+    if not levels:
+        print("  Ignorado 02_cobertura_media_por_complexidade.png: sem níveis.")
+        return
+
+    generators = list(frames.keys())
+    x = np.arange(len(levels))
+    width = 0.35 if len(generators) > 1 else 0.6
+    colors = {"GPT": "#3498db", "Claude": "#e67e22"}
+    offset_map = {"GPT": -width / 2, "Claude": width / 2} if len(generators) > 1 else {"GPT": 0.0}
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    all_values: list[float] = []
+    for gen in generators:
+        means = (
+            frames[gen]
+            .groupby("complexity_level", observed=True)["coverage_percent"]
+            .mean()
+            .reindex(levels)
+        )
+        offsets = x + offset_map.get(gen, 0.0)
+        bars = ax.bar(
+            offsets,
+            means.values,
+            width,
+            label=gen,
+            color=colors.get(gen, "#95a5a6"),
+            edgecolor="#333333",
+            linewidth=0.6,
+        )
+        for bar, val in zip(bars, means.values):
+            if pd.notna(val):
+                all_values.append(float(val))
+                ax.annotate(f"{val:.1f}%", xy=(bar.get_x() + bar.get_width() / 2, val), ha="center", va="bottom")
+
     ax.set_xlabel("complexity_level")
     ax.set_ylabel("coverage_percent (média, %)")
+    ax.set_xticks(x)
+    ax.set_xticklabels(levels)
     ax.set_ylim(0, 100)
-    for bar, val in zip(bars, values):
-        ax.annotate(f"{val:.1f}%", xy=(bar.get_x() + bar.get_width() / 2, val), ha="center", va="bottom")
+    if len(generators) > 1:
+        ax.legend()
     fig.tight_layout()
     _save_fig(OUTPUT_DIR / "02_cobertura_media_por_complexidade.png")
 
 
-def _boxplot_by_complexity(
+def _boxplot_grouped_by_complexity_and_generator(
     df: pd.DataFrame,
+    *,
     value_col: str,
     ylabel: str,
     filename: str,
 ) -> None:
+    levels = [lvl for lvl in COMPLEXITY_ORDER if lvl in df["complexity_level"].values]
+    generators = [g for g in ("GPT", "Claude") if g in df["generator"].values]
+    if not levels or not generators:
+        print(f"  Ignorado {filename}: sem dados.")
+        return
+
+    colors = {"GPT": "#3498db", "Claude": "#e67e22"}
+    offsets = {"GPT": -0.2, "Claude": 0.2} if len(generators) > 1 else {"GPT": 0.0}
+    fig, ax = plt.subplots(figsize=(8, 5))
+    legend_handles: list[plt.Rectangle] = []
+
+    for gen in generators:
+        box_data: list[np.ndarray] = []
+        positions: list[float] = []
+        for idx, level in enumerate(levels):
+            subset = df.loc[
+                (df["complexity_level"] == level) & (df["generator"] == gen),
+                value_col,
+            ].dropna()
+            if len(subset) > 0:
+                box_data.append(subset.values)
+                positions.append(idx + offsets.get(gen, 0.0))
+        if not box_data:
+            continue
+        bp = ax.boxplot(box_data, positions=positions, widths=0.35, patch_artist=True, manage_ticks=False)
+        color = colors.get(gen, "#95a5a6")
+        for patch in bp["boxes"]:
+            patch.set_facecolor(color)
+            patch.set_alpha(0.65)
+        legend_handles.append(plt.Rectangle((0, 0), 1, 1, fc=color, alpha=0.65, ec="#333333"))
+
+    ax.set_xticks(np.arange(len(levels)))
+    ax.set_xticklabels(levels)
+    ax.set_xlabel("complexity_level")
+    ax.set_ylabel(ylabel)
+    if len(generators) > 1:
+        ax.legend(legend_handles, generators, loc="best")
+    fig.tight_layout()
+    _save_fig(OUTPUT_DIR / filename)
+
+
+def plot_03_nota_llm_por_complexidade(df_eval: pd.DataFrame) -> None:
+    df = df_eval.copy()
+    df["complexity_level"] = df["complexity_level"].apply(normalize_complexity_level)
+    df["overall_score"] = pd.to_numeric(df["overall_score"], errors="coerce")
     data = []
     labels = []
     for level in COMPLEXITY_ORDER:
-        subset = df.loc[df["complexity_level"] == level, value_col].dropna()
+        subset = df.loc[df["complexity_level"] == level, "overall_score"].dropna()
         if len(subset) > 0:
             data.append(subset.values)
             labels.append(level)
     if not data:
-        print(f"  Ignorado {filename}: sem dados.")
+        print("  Ignorado 03_nota_llm_por_complexidade.png: sem dados.")
         return
 
     fig, ax = plt.subplots(figsize=(7, 5))
@@ -186,21 +328,9 @@ def _boxplot_by_complexity(
         patch.set_facecolor(color)
         patch.set_alpha(0.65)
     ax.set_xlabel("complexity_level")
-    ax.set_ylabel(ylabel)
+    ax.set_ylabel("overall_score")
     fig.tight_layout()
-    _save_fig(OUTPUT_DIR / filename)
-
-
-def plot_03_nota_llm_por_complexidade(df_eval: pd.DataFrame) -> None:
-    df = df_eval.copy()
-    df["complexity_level"] = df["complexity_level"].apply(normalize_complexity_level)
-    df["overall_score"] = pd.to_numeric(df["overall_score"], errors="coerce")
-    _boxplot_by_complexity(
-        df,
-        "overall_score",
-        "overall_score",
-        "03_nota_llm_por_complexidade.png",
-    )
+    _save_fig(OUTPUT_DIR / "03_nota_llm_por_complexidade.png")
 
 
 def _scatter_with_trend(
@@ -245,15 +375,20 @@ def plot_04_cobertura_vs_nota_llm(df_eval: pd.DataFrame) -> None:
     )
 
 
-def plot_05_test_strength_por_complexidade(df_str: pd.DataFrame) -> None:
-    df = df_str.copy()
-    df["complexity_level"] = df["complexity_level"].apply(normalize_complexity_level)
-    df["test_strength_score"] = pd.to_numeric(df["test_strength_score"], errors="coerce")
-    _boxplot_by_complexity(
+def plot_05_test_strength_por_complexidade(df_str: pd.DataFrame, df_cov: pd.DataFrame, *, cfg=None) -> None:
+    if cfg is None:
+        df = df_str.copy()
+        df["complexity_level"] = df["complexity_level"].apply(normalize_complexity_level)
+        df["test_strength_score"] = pd.to_numeric(df["test_strength_score"], errors="coerce")
+        df["generator"] = "GPT"
+    else:
+        df = _load_strength_frames(df_cov, df_str, cfg=cfg)
+
+    _boxplot_grouped_by_complexity_and_generator(
         df,
-        "test_strength_score",
-        "test_strength_score (0–10)",
-        "05_test_strength_por_complexidade.png",
+        value_col="test_strength_score",
+        ylabel="test_strength_score (0–10)",
+        filename="05_test_strength_por_complexidade.png",
     )
 
 
@@ -435,13 +570,13 @@ def main() -> None:
 
     print("\nGráficos:")
     plot_01_execucao_por_status(df_cov, cfg=cfg)
-    plot_02_cobertura_media_por_complexidade(df_cov)
+    plot_02_cobertura_media_por_complexidade(df_cov, cfg=cfg)
 
     if df_eval is not None:
         plot_03_nota_llm_por_complexidade(df_eval)
         plot_04_cobertura_vs_nota_llm(df_eval)
     if df_str is not None:
-        plot_05_test_strength_por_complexidade(df_str)
+        plot_05_test_strength_por_complexidade(df_str, df_cov, cfg=cfg)
         plot_06_test_strength_vs_coverage(df_str)
     if df_str is not None and df_eval is not None:
         plot_07_test_strength_vs_llm_score(df_str, df_eval, df_cov)

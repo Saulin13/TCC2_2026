@@ -92,18 +92,15 @@ def _build_pair(gpt_df: pd.DataFrame, claude_df: pd.DataFrame, *, generator: str
 
 
 def plot_cross_evaluation_2x2_by_function(df: pd.DataFrame, out_dir: Path) -> None:
-    """
-    Figura 2x2: overall_score por índice de função (1..N) em cada cenário da matriz.
-    A→B: testes gerados por A, avaliados por B.
-  """
-    panels: list[tuple[str, str]] = [
-        ("overall_score_gpt_on_gpt", "GPT→GPT"),
-        ("overall_score_claude_on_gpt", "GPT→Claude"),
-        ("overall_score_gpt_on_claude", "Claude→GPT"),
-        ("overall_score_claude_on_claude", "Claude→Claude"),
+    """Figura 2x2 de dispersão cruzada (estilo overall_score_gpt_tests_gpt_vs_claude)."""
+    panels: list[tuple[str, str, str, str]] = [
+        ("overall_score_gpt_on_gpt", "overall_score_claude_on_gpt", "Testes GPT: GPT vs Claude", "GPT", "Claude"),
+        ("overall_score_gpt_on_gpt", "overall_score_gpt_on_claude", "Avaliador GPT", "GPT", "GPT"),
+        ("overall_score_claude_on_claude", "overall_score_claude_on_gpt", "Avaliador Claude", "Claude", "Claude"),
+        ("overall_score_claude_on_claude", "overall_score_gpt_on_claude", "Testes Claude: Claude vs GPT", "Claude", "GPT"),
     ]
 
-    missing = [col for col, _ in panels if col not in df.columns]
+    missing = sorted({col for x_col, y_col, _, _, _ in panels for col in (x_col, y_col) if col not in df.columns})
     if missing:
         print(
             "  Ignorado overall_score_cross_evaluation_2x2_by_function.png: "
@@ -111,44 +108,39 @@ def plot_cross_evaluation_2x2_by_function(df: pd.DataFrame, out_dir: Path) -> No
         )
         return
 
-    n = len(df)
-    if n == 0:
+    if df.empty:
         print("  Ignorado overall_score_cross_evaluation_2x2_by_function.png: dataframe vazio.")
         return
 
-    x_indices = np.arange(1, n + 1)
-
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    for ax, (score_col, title) in zip(axes.flatten(), panels):
-        scores = pd.to_numeric(df[score_col], errors="coerce")
-        ax.scatter(
-            x_indices,
-            scores,
-            alpha=0.85,
-            s=60,
-            c="#2980b9",
-            edgecolors="white",
-            linewidths=0.5,
-        )
+    for ax, (x_col, y_col, title, xlabel, ylabel) in zip(axes.flatten(), panels):
+        valid = pd.DataFrame(
+            {
+                "x": pd.to_numeric(df[x_col], errors="coerce"),
+                "y": pd.to_numeric(df[y_col], errors="coerce"),
+            }
+        ).dropna()
 
-        if scores.notna().any():
-            mean_val = float(scores.mean())
-            ax.axhline(
-                mean_val,
-                linestyle="--",
-                color="#c0392b",
-                linewidth=1.5,
-                label=f"Média = {mean_val:.2f}",
-            )
-            ax.legend(loc="best", fontsize=9)
-        else:
+        if valid.empty:
             ax.text(0.5, 0.5, "Sem dados", transform=ax.transAxes, ha="center", va="center")
+        else:
+            ax.scatter(
+                valid["x"],
+                valid["y"],
+                alpha=0.85,
+                s=80,
+                c="#2980b9",
+                edgecolors="white",
+                linewidths=0.5,
+            )
 
-        ax.set_xlim(0.5, n + 0.5)
+        ax.plot([0, SCORE_AXIS_MAX], [0, SCORE_AXIS_MAX], "--", color="#c0392b", linewidth=1.5)
+        ax.set_xlim(0, SCORE_AXIS_MAX)
         ax.set_ylim(0, SCORE_AXIS_MAX)
+        ax.set_aspect("equal", adjustable="box")
         ax.set_title(title, fontsize=11, fontweight="bold")
-        ax.set_xlabel("Índice da função")
-        ax.set_ylabel("overall_score")
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
         ax.grid(True, alpha=0.3)
 
     fig.tight_layout()
@@ -216,20 +208,27 @@ def _plot_cross_by_complexity(cross_df: pd.DataFrame) -> None:
     )
     x = np.arange(len(levels))
     width = 0.2
-    fig, ax = plt.subplots(figsize=(10, 5))
+    fig, ax = plt.subplots(figsize=(11, 5))
     colors = ["#3498db", "#9b59b6", "#1abc9c", "#e67e22"]
+    all_vals: list[float] = []
     for idx, scen in enumerate(scenarios):
         vals = means[scen].values if scen in means.columns else np.array([np.nan] * len(levels))
         bars = ax.bar(x + (idx - 1.5) * width, vals, width, label=scen, color=colors[idx])
         _annotate_bars(ax, bars, decimals=2)
+        for val in vals:
+            if pd.notna(val):
+                all_vals.append(float(val))
     ax.set_xticks(x)
     ax.set_xticklabels(levels)
     ax.set_xlabel("complexity_level")
     ax.set_ylabel("overall_score (média)")
-    ax.set_ylim(0, 10)
-    ax.legend()
-    fig.tight_layout()
-    _save_fig(PLOTS_DIR / "overall_score_cross_evaluation_by_complexity.png")
+    ymax = max(all_vals + [10.0]) * 1.12
+    ax.set_ylim(0, ymax)
+    ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), borderaxespad=0.0)
+    fig.subplots_adjust(right=0.78)
+    fig.savefig(PLOTS_DIR / "overall_score_cross_evaluation_by_complexity.png", dpi=FIG_DPI, bbox_inches="tight")
+    plt.close(fig)
+    print("  Salvo: overall_score_cross_evaluation_by_complexity.png")
 
 
 def write_summary(pair_gpt_tests: pd.DataFrame, pair_claude_tests: pd.DataFrame, output_summary: Path) -> None:
