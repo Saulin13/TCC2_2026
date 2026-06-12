@@ -39,6 +39,7 @@ PIPELINE_PLOTS_FOR_CROSS_EVALUATION: tuple[str, ...] = (
     "01_execucao_por_status.png",
     "02_cobertura_media_por_complexidade.png",
     "05_test_strength_por_complexidade.png",
+    "05b_distribuicao_mutation_score.png",
 )
 
 
@@ -62,10 +63,11 @@ def normalize_complexity_level(value: object) -> str:
 
 
 def clean_cross_evaluation_folder(cross_dir: Path) -> None:
-    """Remove todos os arquivos da pasta cross_evaluation antes de montar a seleção final."""
+    """Remove arquivos gerados anteriormente, preservando README de apresentação."""
     cross_dir.mkdir(parents=True, exist_ok=True)
+    preserve = {"README_RESULTADOS.txt"}
     for path in cross_dir.iterdir():
-        if path.is_file():
+        if path.is_file() and path.name not in preserve:
             path.unlink()
 
 

@@ -325,7 +325,7 @@ def write_summary(df: pd.DataFrame, output_summary: Path, *, dataset_label: str)
         "",
         "Médias gerais",
         f"  Cobertura (%): {df['coverage_percent'].mean():.2f}",
-        f"  test_strength_score: {df['test_strength_score'].mean():.2f}",
+        f"  test_strength_score (mutation testing): {df['test_strength_score'].mean():.2f}",
         f"  execution_success_rate: {df['execution_success_rate'].mean():.2f}",
     ]
 
@@ -374,7 +374,7 @@ def write_summary(df: pd.DataFrame, output_summary: Path, *, dataset_label: str)
             lines.append(f"  {level}: {sub.mean():.2f}% (n={len(sub)})")
 
     lines.append("")
-    lines.append("Média de test_strength_score por complexidade:")
+    lines.append("Média de test_strength_score (mutation testing) por complexidade:")
     for level in COMPLEXITY_ORDER:
         sub = df[df["complexity_level"] == level]["test_strength_score"]
         if not sub.empty:

@@ -8,3 +8,4 @@ openpyxl
 python-dotenv
 anthropic
 openai
+mutmut>=3.6.0
