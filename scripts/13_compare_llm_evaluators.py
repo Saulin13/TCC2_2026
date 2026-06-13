@@ -12,6 +12,12 @@ import numpy as np
 import pandas as pd
 
 from csv_columns import prepare_csv_for_save, standardize_function_column
+from cross_evaluation_config import (
+    CROSS_EVALUATION_ALLOWED_FILES,
+    PIPELINE_PLOTS_FOR_CROSS_EVALUATION,
+    clean_cross_evaluation_folder,
+    prune_cross_evaluation_folder,
+)
 from dataset_config import RESULTS_DIR, add_dataset_argument, resolve_dataset
 
 PLOTS_DIR = Path(".")
@@ -22,25 +28,7 @@ SCORE_AXIS_MAX = 10.0
 MERGE_KEYS = ("function_name", "test_file")
 COMPLEXITY_ORDER = ("baixa", "media", "alta")
 
-CROSS_EVALUATION_PRESENTATION_FILES: tuple[str, ...] = (
-    "01_execucao_por_status.png",
-    "02_cobertura_media_por_complexidade.png",
-    "05_test_strength_por_complexidade.png",
-    "overall_score_cross_evaluation_by_complexity.png",
-    "overall_score_cross_evaluation_mean.png",
-    "overall_score_cross_evaluation_2x2_by_function.png",
-    "overall_score_gpt_tests_gpt_vs_claude_by_function.png",
-    "overall_score_evaluator_gpt_by_function.png",
-    "overall_score_evaluator_claude_by_function.png",
-    "overall_score_claude_tests_claude_vs_gpt_by_function.png",
-)
-
-PIPELINE_PLOTS_FOR_CROSS_EVALUATION: tuple[str, ...] = (
-    "01_execucao_por_status.png",
-    "02_cobertura_media_por_complexidade.png",
-    "05_test_strength_por_complexidade.png",
-    "05b_distribuicao_mutation_score.png",
-)
+CROSS_EVALUATION_PRESENTATION_FILES = CROSS_EVALUATION_ALLOWED_FILES
 
 
 def _normalize_text(value: str) -> str:
@@ -62,15 +50,6 @@ def normalize_complexity_level(value: object) -> str:
     return norm
 
 
-def clean_cross_evaluation_folder(cross_dir: Path) -> None:
-    """Remove arquivos gerados anteriormente, preservando README de apresentação."""
-    cross_dir.mkdir(parents=True, exist_ok=True)
-    preserve = {"README_RESULTADOS.txt"}
-    for path in cross_dir.iterdir():
-        if path.is_file() and path.name not in preserve:
-            path.unlink()
-
-
 def _copy_pipeline_plots_to_cross_evaluation(plots_dir: Path, cross_dir: Path) -> list[Path]:
     copied: list[Path] = []
     for filename in PIPELINE_PLOTS_FOR_CROSS_EVALUATION:
@@ -88,7 +67,12 @@ def _copy_pipeline_plots_to_cross_evaluation(plots_dir: Path, cross_dir: Path) -
 def _list_cross_evaluation_files(cross_dir: Path) -> list[Path]:
     if not cross_dir.is_dir():
         return []
-    return sorted(path.resolve() for path in cross_dir.iterdir() if path.is_file())
+    allowed = set(CROSS_EVALUATION_ALLOWED_FILES)
+    return sorted(
+        path.resolve()
+        for path in cross_dir.iterdir()
+        if path.is_file() and path.name in allowed
+    )
 
 
 def _save_figure(fig: plt.Figure, filename: str, output_dirs: list[Path], *, dpi: int = FIG_DPI) -> list[Path]:
@@ -539,6 +523,9 @@ def main() -> None:
     print("\nMontando pasta cross_evaluation (apresentação):")
     for cross_dir in cross_eval_dirs:
         _copy_pipeline_plots_to_cross_evaluation(PLOTS_DIR, cross_dir)
+        removed = prune_cross_evaluation_folder(cross_dir)
+        if removed:
+            print(f"  Removidos de {cross_dir}: {', '.join(removed)}")
 
     write_summary(pair_gpt_tests, pair_claude_tests, output_summary)
     print(f"Resumo: {output_summary}")

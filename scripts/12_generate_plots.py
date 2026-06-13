@@ -14,6 +14,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from cross_evaluation_config import (
+    PIPELINE_PLOTS_FOR_CROSS_EVALUATION,
+    prune_cross_evaluation_folder,
+)
 from dataset_config import add_dataset_argument, resolve_dataset
 
 OUTPUT_DIR = Path(".")
@@ -23,12 +27,7 @@ STATUS_ORDER = ("ok", "tests_failed", "pytest_error", "timeout")
 FIG_DPI = 150
 INSPECTION_DIR_NAME = "inspecao"
 CROSS_EVAL_DIR_NAME = "cross_evaluation"
-PRESENTATION_PLOT_NAMES: tuple[str, ...] = (
-    "01_execucao_por_status.png",
-    "02_cobertura_media_por_complexidade.png",
-    "05_test_strength_por_complexidade.png",
-    "05b_distribuicao_mutation_score.png",
-)
+PRESENTATION_PLOT_NAMES = PIPELINE_PLOTS_FOR_CROSS_EVALUATION
 MERGE_KEYS = ("function_name", "test_file")
 
 
@@ -895,12 +894,15 @@ def main() -> None:
 
     print("\nPasta cross_evaluation (apresentação):")
     sync_cross_evaluation_presentation()
+    removed = prune_cross_evaluation_folder(OUTPUT_DIR / CROSS_EVAL_DIR_NAME)
+    if removed:
+        print(f"  Removidos de cross_evaluation: {', '.join(removed)}")
     if df_str is not None:
         write_cross_evaluation_readme(
             df_cov,
             df_str,
             cfg=cfg,
-            output_path=OUTPUT_DIR / CROSS_EVAL_DIR_NAME / "README_RESULTADOS.txt",
+            output_path=OUTPUT_DIR / "README_RESULTADOS.txt",
         )
 
     print("\nGráficos de inspeção (secundários, pasta inspecao/):")

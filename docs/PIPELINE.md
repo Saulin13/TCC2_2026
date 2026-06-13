@@ -64,6 +64,8 @@ Amostra: `data/selected_functions/sample_thealgorithms_60.csv` (60 funções).
 python scripts/00_run_pipeline.py --dataset thealgorithms
 ```
 
+> **Mutation testing:** no dataset `thealgorithms`, a etapa `10_calculate_test_strength.py` limita por padrão `max_mutants=5`, `mutation_timeout=10s` e `function_timeout=120s` para evitar travamentos em funções lentas (ex.: `visualise`). Use `--skip-functions visualise` para pular funções específicas. Resultados parciais são salvos em caso de interrupção (Ctrl+C).
+
 ### scikit-learn (`real`)
 
 Amostra: `data/selected_functions/sample_real_project_15.csv` (15 funções; 5 baixa, 5 média, 5 alta).

@@ -19,8 +19,33 @@ from pathlib import Path
 import pandas as pd
 
 from csv_columns import prepare_csv_for_save
-from dataset_config import BASE_DIR, add_dataset_argument, resolve_dataset
+from dataset_config import (
+    BASE_DIR,
+    DATASET_REAL,
+    DATASET_THEALGORITHMS,
+    add_dataset_argument,
+    resolve_dataset,
+)
 from mutation_testing import MUTATION_TOOL, MutationRunResult, run_mutation_testing
+
+DATASET_MUTATION_DEFAULTS: dict[str, dict[str, int]] = {
+    DATASET_THEALGORITHMS: {
+        "max_mutants": 5,
+        "mutation_timeout": 10,
+        "function_timeout": 120,
+    },
+    DATASET_REAL: {
+        "max_mutants": 25,
+        "mutation_timeout": 90,
+        "function_timeout": 300,
+    },
+}
+
+THEALGORITHMS_MUTATION_NOTE = (
+    "No dataset thealgorithms, o mutation testing usa limites conservadores por padrão "
+    "(max_mutants=5, mutation_timeout=10s, function_timeout=120s) devido ao custo "
+    "computacional de funções com testes lentos (ex.: visualise)."
+)
 
 OUTPUT_COLUMNS = [
     "function_name",
@@ -257,15 +282,157 @@ def _parse_line_number(value: object) -> int | None:
     return parsed if parsed > 0 else None
 
 
+def _parse_skip_functions(raw: str) -> set[str]:
+    return {_normalize_text(part) for part in raw.split(",") if part.strip()}
+
+
+def _resolve_mutation_limits(args: argparse.Namespace, dataset_key: str) -> dict[str, int]:
+    defaults = DATASET_MUTATION_DEFAULTS.get(
+        dataset_key,
+        DATASET_MUTATION_DEFAULTS[DATASET_REAL],
+    )
+    return {
+        "max_mutants": args.max_mutants if args.max_mutants is not None else defaults["max_mutants"],
+        "mutation_timeout": (
+            args.mutation_timeout
+            if args.mutation_timeout is not None
+            else defaults["mutation_timeout"]
+        ),
+        "function_timeout": (
+            args.function_timeout
+            if args.function_timeout is not None
+            else defaults["function_timeout"]
+        ),
+    }
+
+
+def _skipped_result() -> MutationRunResult:
+    return MutationRunResult(
+        mutation_score_percent=0.0,
+        test_strength_score=0.0,
+        mutation_status="skipped",
+        mutation_error="skipped by --skip-functions",
+        mutants_total=0,
+        mutants_killed=0,
+    )
+
+
+def _build_result_row(
+    *,
+    function_name: str,
+    generator: str,
+    cov_row: pd.Series,
+    metrics: dict[str, int | bool],
+    coverage: float,
+    passed: bool,
+    status: str,
+    heuristic_score: float,
+    mutation_result: MutationRunResult,
+) -> dict[str, object]:
+    return {
+        "function_name": function_name,
+        "generator": generator,
+        "test_file": str(cov_row["test_file"]),
+        "complexity_level": normalize_complexity_level(cov_row.get("complexity_level")),
+        "coverage_percent": round(coverage, 4),
+        "assert_count": metrics["assert_count"],
+        "test_function_count": metrics["test_function_count"],
+        "uses_pytest_raises": metrics["uses_pytest_raises"],
+        "edge_case_count": metrics["edge_case_count"],
+        "execution_status": status,
+        "passed": passed,
+        "heuristic_test_strength_score": heuristic_score,
+        "mutation_score_percent": mutation_result.mutation_score_percent,
+        "test_strength_score": mutation_result.test_strength_score,
+        "mutation_status": mutation_result.mutation_status,
+        "mutation_error": mutation_result.mutation_error,
+        "mutants_total": mutation_result.mutants_total,
+        "mutants_killed": mutation_result.mutants_killed,
+        "mutation_tool": mutation_result.mutation_tool,
+    }
+
+
+def _save_results(
+    rows: list[dict[str, object]],
+    *,
+    cfg,
+    output_csv: Path,
+    output_summary: Path,
+    limits: dict[str, int],
+    partial: bool = False,
+) -> None:
+    if not rows:
+        print("Nenhum registro para salvar.")
+        return
+
+    out_df = prepare_csv_for_save(pd.DataFrame(rows)[OUTPUT_COLUMNS])
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    out_df.to_csv(output_csv, index=False, encoding="utf-8")
+
+    ok_count = int((out_df["mutation_status"] == "ok").sum())
+    failed_count = int((out_df["mutation_status"] == "failed").sum())
+    timeout_count = int((out_df["mutation_status"] == "timeout").sum())
+    skipped_count = int((out_df["mutation_status"] == "skipped").sum())
+
+    summary_lines = [
+        "Resumo do mutation testing",
+        "=" * 40,
+        f"Dataset: {cfg.key}",
+        f"Ferramenta: {MUTATION_TOOL}",
+        f"Limites: max_mutants={limits['max_mutants']} | "
+        f"mutation_timeout={limits['mutation_timeout']}s | "
+        f"function_timeout={limits['function_timeout']}s",
+    ]
+    if cfg.key == DATASET_THEALGORITHMS:
+        summary_lines.append(THEALGORITHMS_MUTATION_NOTE)
+    if partial:
+        summary_lines.append("")
+        summary_lines.append("ATENÇÃO: arquivo parcial (interrompido antes do fim).")
+
+    summary_lines.extend(
+        [
+            "",
+            "test_strength_score é derivado de mutation testing:",
+            "  mutation_score_percent = mutantes mortos / mutantes totais * 100",
+            "  test_strength_score = mutation_score_percent / 10",
+            "",
+            f"Testes processados: {len(out_df)}",
+            f"mutation_status ok: {ok_count}",
+            f"mutation_status failed: {failed_count}",
+            f"mutation_status timeout: {timeout_count}",
+            f"mutation_status skipped: {skipped_count}",
+            "",
+            "Média mutation_score_percent por gerador:",
+        ]
+    )
+    for generator, group in out_df.groupby("generator", observed=True):
+        summary_lines.append(f"  {generator}: {group['mutation_score_percent'].mean():.2f}%")
+    summary_lines.append("")
+    summary_lines.append("Média test_strength_score por gerador:")
+    for generator, group in out_df.groupby("generator", observed=True):
+        summary_lines.append(f"  {generator}: {group['test_strength_score'].mean():.2f}")
+
+    output_summary.write_text("\n".join(summary_lines) + "\n", encoding="utf-8")
+
+    label = "parciais " if partial else ""
+    print(f"\nResultados {label}salvos em: {output_csv}")
+    print(f"Resumo {label}salvo em: {output_summary}")
+    _print_summary(out_df)
+
+
 def _print_summary(df: pd.DataFrame) -> None:
     total = len(df)
     ok_count = int((df["mutation_status"] == "ok").sum())
     failed_count = int((df["mutation_status"] == "failed").sum())
+    timeout_count = int((df["mutation_status"] == "timeout").sum())
+    skipped_count = int((df["mutation_status"] == "skipped").sum())
 
     print("\n--- Resumo do mutation testing ---")
     print(f"Testes processados: {total}")
     print(f"mutation_status ok: {ok_count}")
     print(f"mutation_status failed: {failed_count}")
+    print(f"mutation_status timeout: {timeout_count}")
+    print(f"mutation_status skipped: {skipped_count}")
     print(f"Ferramenta: {MUTATION_TOOL}")
 
     if "generator" in df.columns:
@@ -291,14 +458,34 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-mutants",
         type=int,
-        default=25,
-        help="Máximo de mutantes avaliados por par função/teste (padrão: 25).",
+        default=None,
+        help=(
+            "Máximo de mutantes avaliados por par função/teste. "
+            "Padrão: 5 (thealgorithms) ou 25 (real)."
+        ),
     )
     parser.add_argument(
         "--mutation-timeout",
         type=int,
-        default=90,
-        help="Timeout em segundos por execução de pytest com mutante (padrão: 90).",
+        default=None,
+        help=(
+            "Timeout em segundos por execução de pytest com mutante. "
+            "Padrão: 10s (thealgorithms) ou 90s (real)."
+        ),
+    )
+    parser.add_argument(
+        "--function-timeout",
+        type=int,
+        default=None,
+        help=(
+            "Timeout total em segundos por função (geração + mutantes). "
+            "Padrão: 120s (thealgorithms) ou 300s (real)."
+        ),
+    )
+    parser.add_argument(
+        "--skip-functions",
+        default="",
+        help="Lista separada por vírgulas de function_name a pular (ex.: visualise,quick_sort).",
     )
     add_dataset_argument(parser)
     return parser.parse_args()
@@ -307,6 +494,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     cfg = resolve_dataset(args.dataset)
+    limits = _resolve_mutation_limits(args, cfg.key)
+    skip_functions = _parse_skip_functions(args.skip_functions)
     output_csv = cfg.result_csv("forca_heuristica_testes")
     output_summary = cfg.result_txt("resumo_mutation_testing")
 
@@ -317,129 +506,140 @@ def main() -> None:
     print("Calculando test_strength_score via mutation testing...")
     print(f"Ferramenta: {MUTATION_TOOL}")
     print(f"Geradores: {', '.join(generators)}")
-    print(f"max_mutants={args.max_mutants} | mutation_timeout={args.mutation_timeout}s\n")
+    print(
+        f"max_mutants={limits['max_mutants']} | "
+        f"mutation_timeout={limits['mutation_timeout']}s | "
+        f"function_timeout={limits['function_timeout']}s"
+    )
+    if cfg.key == DATASET_THEALGORITHMS:
+        print(THEALGORITHMS_MUTATION_NOTE)
+    if skip_functions:
+        print(f"Funções ignoradas: {', '.join(sorted(skip_functions))}")
+    print()
 
     rows: list[dict[str, object]] = []
 
-    for generator in generators:
-        input_coverage = cfg.result_csv(f"cobertura_testes_gerados_{generator}")
-        if not input_coverage.exists():
-            print(f"Aviso: cobertura ausente para {generator}: {input_coverage}")
-            continue
+    try:
+        for generator in generators:
+            input_coverage = cfg.result_csv(f"cobertura_testes_gerados_{generator}")
+            if not input_coverage.exists():
+                print(f"Aviso: cobertura ausente para {generator}: {input_coverage}")
+                continue
 
-        df_cov = pd.read_csv(input_coverage)
-        print(f"Processando {generator}: {len(df_cov)} registro(s)")
+            df_cov = pd.read_csv(input_coverage)
+            print(f"Processando {generator}: {len(df_cov)} registro(s)")
 
-        for index, cov_row in df_cov.iterrows():
-            function_name = str(cov_row["function_name"])
-            test_path = _resolve_test_path(cov_row["test_file"])
-            source_path = _resolve_source_path(cov_row)
+            for index, cov_row in df_cov.iterrows():
+                function_name = str(cov_row["function_name"])
+                test_path = _resolve_test_path(cov_row["test_file"])
+                source_path = _resolve_source_path(cov_row)
 
-            metrics = analyze_test_file(test_path)
-            coverage = float(cov_row["coverage_percent"]) if pd.notna(cov_row["coverage_percent"]) else 0.0
-            passed = _parse_passed(cov_row["passed"])
-            status = str(cov_row.get("execution_status", ""))
-
-            heuristic_score = compute_heuristic_test_strength_score(
-                coverage_percent=coverage,
-                assert_count=int(metrics["assert_count"]),
-                test_function_count=int(metrics["test_function_count"]),
-                edge_case_count=int(metrics["edge_case_count"]),
-                uses_pytest_raises=bool(metrics["uses_pytest_raises"]),
-                execution_status=status,
-                passed=passed,
-            )
-
-            print(f"  [{generator}] {index + 1}/{len(df_cov)} {function_name} — mutation testing...", flush=True)
-
-            if source_path is None or not source_path.is_file():
-                mutation_result = MutationRunResult(
-                    mutation_score_percent=0.0,
-                    test_strength_score=0.0,
-                    mutation_status="failed",
-                    mutation_error="source_file ausente ou inválido no CSV de cobertura",
-                    mutants_total=0,
-                    mutants_killed=0,
+                metrics = analyze_test_file(test_path)
+                coverage = (
+                    float(cov_row["coverage_percent"])
+                    if pd.notna(cov_row["coverage_percent"])
+                    else 0.0
                 )
-            else:
-                mutation_result = run_mutation_testing(
-                    source_file=source_path,
-                    function_name=function_name,
-                    test_file=test_path,
-                    env=env,
-                    start_line=_parse_line_number(cov_row.get("start_line")),
-                    end_line=_parse_line_number(cov_row.get("end_line")),
-                    max_mutants=args.max_mutants,
-                    timeout_seconds=args.mutation_timeout,
+                passed = _parse_passed(cov_row["passed"])
+                status = str(cov_row.get("execution_status", ""))
+
+                heuristic_score = compute_heuristic_test_strength_score(
+                    coverage_percent=coverage,
+                    assert_count=int(metrics["assert_count"]),
+                    test_function_count=int(metrics["test_function_count"]),
+                    edge_case_count=int(metrics["edge_case_count"]),
+                    uses_pytest_raises=bool(metrics["uses_pytest_raises"]),
+                    execution_status=status,
+                    passed=passed,
                 )
 
-            rows.append(
-                {
-                    "function_name": function_name,
-                    "generator": generator,
-                    "test_file": str(cov_row["test_file"]),
-                    "complexity_level": normalize_complexity_level(cov_row.get("complexity_level")),
-                    "coverage_percent": round(coverage, 4),
-                    "assert_count": metrics["assert_count"],
-                    "test_function_count": metrics["test_function_count"],
-                    "uses_pytest_raises": metrics["uses_pytest_raises"],
-                    "edge_case_count": metrics["edge_case_count"],
-                    "execution_status": status,
-                    "passed": passed,
-                    "heuristic_test_strength_score": heuristic_score,
-                    "mutation_score_percent": mutation_result.mutation_score_percent,
-                    "test_strength_score": mutation_result.test_strength_score,
-                    "mutation_status": mutation_result.mutation_status,
-                    "mutation_error": mutation_result.mutation_error,
-                    "mutants_total": mutation_result.mutants_total,
-                    "mutants_killed": mutation_result.mutants_killed,
-                    "mutation_tool": mutation_result.mutation_tool,
-                }
-            )
+                print(
+                    f"  [{generator}] {index + 1}/{len(df_cov)} {function_name} — mutation testing...",
+                    flush=True,
+                )
 
-            status_label = mutation_result.mutation_status
-            print(
-                f"    -> {status_label} | mutantes={mutation_result.mutants_killed}/"
-                f"{mutation_result.mutants_total} | score={mutation_result.test_strength_score:.2f}",
-                flush=True,
-            )
+                if _normalize_text(function_name) in skip_functions:
+                    mutation_result = _skipped_result()
+                    print("    -> skipped (--skip-functions)", flush=True)
+                elif source_path is None or not source_path.is_file():
+                    mutation_result = MutationRunResult(
+                        mutation_score_percent=0.0,
+                        test_strength_score=0.0,
+                        mutation_status="failed",
+                        mutation_error="source_file ausente ou inválido no CSV de cobertura",
+                        mutants_total=0,
+                        mutants_killed=0,
+                    )
+                else:
+                    try:
+                        mutation_result = run_mutation_testing(
+                            source_file=source_path,
+                            function_name=function_name,
+                            test_file=test_path,
+                            env=env,
+                            repo_root=cfg.repo_path,
+                            start_line=_parse_line_number(cov_row.get("start_line")),
+                            end_line=_parse_line_number(cov_row.get("end_line")),
+                            max_mutants=limits["max_mutants"],
+                            timeout_seconds=limits["mutation_timeout"],
+                            function_timeout_seconds=limits["function_timeout"],
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        mutation_result = MutationRunResult(
+                            mutation_score_percent=0.0,
+                            test_strength_score=0.0,
+                            mutation_status="failed",
+                            mutation_error=str(exc),
+                            mutants_total=0,
+                            mutants_killed=0,
+                        )
+
+                rows.append(
+                    _build_result_row(
+                        function_name=function_name,
+                        generator=generator,
+                        cov_row=cov_row,
+                        metrics=metrics,
+                        coverage=coverage,
+                        passed=passed,
+                        status=status,
+                        heuristic_score=heuristic_score,
+                        mutation_result=mutation_result,
+                    )
+                )
+
+                if mutation_result.mutation_status != "skipped":
+                    print(
+                        f"    -> {mutation_result.mutation_status} | "
+                        f"mutantes={mutation_result.mutants_killed}/"
+                        f"{mutation_result.mutants_total} | "
+                        f"score={mutation_result.test_strength_score:.2f}",
+                        flush=True,
+                    )
+    except KeyboardInterrupt:
+        print("\nInterrupção detectada (Ctrl+C). Salvando resultados parciais...", flush=True)
+        _save_results(
+            rows,
+            cfg=cfg,
+            output_csv=output_csv,
+            output_summary=output_summary,
+            limits=limits,
+            partial=True,
+        )
+        raise SystemExit(130) from None
 
     if not rows:
         print("Nenhum registro processado.")
         return
 
-    out_df = prepare_csv_for_save(pd.DataFrame(rows)[OUTPUT_COLUMNS])
-    output_csv.parent.mkdir(parents=True, exist_ok=True)
-    out_df.to_csv(output_csv, index=False, encoding="utf-8")
-
-    summary_lines = [
-        "Resumo do mutation testing",
-        "=" * 40,
-        f"Dataset: {cfg.key}",
-        f"Ferramenta: {MUTATION_TOOL}",
-        "",
-        "test_strength_score agora é derivado de mutation testing:",
-        "  mutation_score_percent = mutantes mortos / mutantes totais * 100",
-        "  test_strength_score = mutation_score_percent / 10",
-        "",
-        f"Testes processados: {len(out_df)}",
-        f"mutation_status ok: {int((out_df['mutation_status'] == 'ok').sum())}",
-        f"mutation_status failed: {int((out_df['mutation_status'] == 'failed').sum())}",
-        "",
-        "Média mutation_score_percent por gerador:",
-    ]
-    for generator, group in out_df.groupby("generator", observed=True):
-        summary_lines.append(f"  {generator}: {group['mutation_score_percent'].mean():.2f}%")
-    summary_lines.append("")
-    summary_lines.append("Média test_strength_score por gerador:")
-    for generator, group in out_df.groupby("generator", observed=True):
-        summary_lines.append(f"  {generator}: {group['test_strength_score'].mean():.2f}")
-
-    output_summary.write_text("\n".join(summary_lines) + "\n", encoding="utf-8")
-
-    print(f"\nResultados salvos em: {output_csv}")
-    print(f"Resumo salvo em: {output_summary}")
-    _print_summary(out_df)
+    _save_results(
+        rows,
+        cfg=cfg,
+        output_csv=output_csv,
+        output_summary=output_summary,
+        limits=limits,
+        partial=False,
+    )
 
 
 if __name__ == "__main__":

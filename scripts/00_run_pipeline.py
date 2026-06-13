@@ -101,22 +101,6 @@ def _build_steps(
         ),
         (
             PipelineStep(
-                "Métrica de sucesso de execução",
-                "09_calculate_execution_success.py",
-                ds_args,
-            ),
-            only_plots,
-        ),
-        (
-            PipelineStep(
-                "Métrica test_strength_score",
-                "10_calculate_test_strength.py",
-                ds_args,
-            ),
-            only_plots,
-        ),
-        (
-            PipelineStep(
                 "Avaliação GPT sobre testes GPT",
                 "06_evaluate_tests_llm.py",
                 ds_args,
@@ -149,11 +133,19 @@ def _build_steps(
         ),
         (
             PipelineStep(
-                "Comparação dos avaliadores",
-                "13_compare_llm_evaluators.py",
+                "Métrica de sucesso de execução",
+                "09_calculate_execution_success.py",
                 ds_args,
             ),
-            only_plots or skip_evaluation,
+            only_plots,
+        ),
+        (
+            PipelineStep(
+                "Métrica test_strength_score",
+                "10_calculate_test_strength.py",
+                ds_args,
+            ),
+            only_plots,
         ),
         (
             PipelineStep(
@@ -170,6 +162,14 @@ def _build_steps(
                 ds_args,
             ),
             False,
+        ),
+        (
+            PipelineStep(
+                "Comparação dos avaliadores",
+                "13_compare_llm_evaluators.py",
+                ds_args,
+            ),
+            only_plots or skip_evaluation,
         ),
         (
             PipelineStep(

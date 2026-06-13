@@ -49,7 +49,7 @@ prompts/           # Templates de geração e avaliação
 | `06d_evaluate_claude_on_claude.py` | Claude avalia testes gerados pelo Claude | Completa matriz 2x2 de avaliação cruzada |
 | `08_calculate_assertion_density.py` | Métrica de densidade de asserts | Após execução dos testes |
 | `09_calculate_execution_success.py` | Métrica de sucesso de execução | Após avaliação GPT (usa categorias da avaliação) |
-| `10_calculate_test_strength.py` | `test_strength_score` heurístico | Após cobertura; não é mutation testing |
+| `10_calculate_test_strength.py` | `test_strength_score` via mutation testing (mutmut/libcst) | Após cobertura; ver limites padrão para `thealgorithms` abaixo |
 | `11_consolidate_results.py` | Une métricas em `resultados_finais_*.csv` | Penúltima etapa; inclui `overall_score` dos 4 cenários (GPT→GPT, GPT→Claude, Claude→GPT, Claude→Claude) |
 | `12_generate_plots.py` | Gráficos 01–07 do experimento | Última etapa analítica por dataset |
 | `13_compare_llm_evaluators.py` | Compara GPT vs Claude nos dois geradores (GPT e Claude) | Após avaliações; gera gráficos de dispersão por gerador e médias da matriz 2x2 |
@@ -66,6 +66,28 @@ prompts/           # Templates de geração e avaliação
 | `thealgorithms` | TheAlgorithms/Python | 60 funções |
 | `real` | scikit-learn | 15 funções (5 baixa, 5 média, 5 alta) |
 | `all` | Ambos, em sequência | — |
+
+### Mutation testing (`10_calculate_test_strength.py`)
+
+No dataset **thealgorithms**, o mutation testing usa limites conservadores por padrão devido ao custo computacional de funções com testes lentos (ex.: `visualise`):
+
+| Parâmetro | Padrão (`thealgorithms`) | Padrão (`real`) |
+|-----------|--------------------------|-----------------|
+| `--max-mutants` | 5 | 25 |
+| `--mutation-timeout` | 10s | 90s |
+| `--function-timeout` | 120s | 300s |
+
+Opções úteis:
+
+```bash
+# Pular funções problemáticas
+python scripts/10_calculate_test_strength.py --dataset thealgorithms --skip-functions visualise
+
+# Ajustar limites manualmente
+python scripts/10_calculate_test_strength.py --dataset thealgorithms --max-mutants 5 --function-timeout 120
+```
+
+Se o script for interrompido (Ctrl+C), os resultados parciais já processados são salvos em `forca_heuristica_testes_*.csv`.
 
 ## Scripts obsoletos / duplicados
 

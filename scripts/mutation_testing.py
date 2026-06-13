@@ -12,9 +12,13 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import mutmut.configuration as mutmut_configuration
 from mutmut.configuration import Config
@@ -73,6 +77,27 @@ def _failed_result(message: str) -> MutationRunResult:
         mutants_total=0,
         mutants_killed=0,
     )
+
+
+def _timeout_result() -> MutationRunResult:
+    return MutationRunResult(
+        mutation_score_percent=0.0,
+        test_strength_score=0.0,
+        mutation_status="timeout",
+        mutation_error="function timeout",
+        mutants_total=0,
+        mutants_killed=0,
+    )
+
+
+def _deadline_exceeded(deadline: float | None) -> bool:
+    return deadline is not None and time.monotonic() >= deadline
+
+
+def _seconds_until_deadline(deadline: float | None) -> int | None:
+    if deadline is None:
+        return None
+    return max(0, int(deadline - time.monotonic()))
 
 
 def _ok_result(*, killed: int, total: int) -> MutationRunResult:
@@ -139,6 +164,10 @@ def _filter_mutations_for_function(
     return selected
 
 
+def _is_sklearn_source(source_file: Path) -> bool:
+    return "sklearn" in source_file.parts
+
+
 def _sklearn_shadow_path(source_file: Path, work_root: Path) -> Path:
     parts = source_file.parts
     if "sklearn" not in parts:
@@ -146,6 +175,82 @@ def _sklearn_shadow_path(source_file: Path, work_root: Path) -> Path:
     sklearn_idx = parts.index("sklearn")
     relative = Path(*parts[sklearn_idx:])
     return work_root / relative
+
+
+def _repo_relative_shadow_path(
+    source_file: Path,
+    work_root: Path,
+    repo_root: Path,
+) -> Path:
+    source_resolved = source_file.resolve()
+    repo_resolved = repo_root.resolve()
+    try:
+        relative = source_resolved.relative_to(repo_resolved)
+    except ValueError as exc:
+        raise ValueError(
+            f"arquivo fora do repositório {repo_resolved}: {source_resolved}"
+        ) from exc
+    return work_root / relative
+
+
+def _resolve_shadow_path(
+    source_file: Path,
+    work_root: Path,
+    *,
+    repo_root: Path | None = None,
+) -> Path:
+    if _is_sklearn_source(source_file):
+        return _sklearn_shadow_path(source_file, work_root)
+    if repo_root is None:
+        raise ValueError(
+            f"repo_root obrigatório para arquivos fora do sklearn: {source_file}"
+        )
+    return _repo_relative_shadow_path(source_file, work_root, repo_root)
+
+
+def _copy_package_init_chain(
+    source_file: Path,
+    shadow_source: Path,
+    repo_root: Path,
+) -> None:
+    """Copia __init__.py dos pacotes ancestrais para o shadow tree."""
+    repo_resolved = repo_root.resolve()
+    try:
+        rel_parent = source_file.resolve().parent.relative_to(repo_resolved)
+    except ValueError:
+        return
+
+    work_root = shadow_source.parents[len(rel_parent.parts)]
+    partial = Path()
+    for part in rel_parent.parts:
+        partial = partial / part
+        init_src = repo_resolved / partial / "__init__.py"
+        if init_src.is_file():
+            shadow_init = work_root / partial / "__init__.py"
+            shadow_init.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(init_src, shadow_init)
+
+
+def _setup_shadow_source(
+    source_file: Path,
+    shadow_source: Path,
+    *,
+    repo_root: Path | None,
+) -> None:
+    shadow_source.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_file, shadow_source)
+    if repo_root is not None and not _is_sklearn_source(source_file):
+        _copy_package_init_chain(source_file, shadow_source, repo_root)
+
+
+def _terminate_process(proc: subprocess.Popen[Any]) -> None:
+    if proc.poll() is not None:
+        return
+    proc.kill()
+    try:
+        proc.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
 
 
 def _run_pytest_on_mutant(
@@ -167,15 +272,37 @@ def _run_pytest_on_mutant(
         f"{pythonpath}{os.pathsep}{existing}" if existing else pythonpath
     )
 
-    completed = subprocess.run(
+    proc = subprocess.Popen(
         [sys.executable, "-m", "pytest", "-q", os.fspath(test_file)],
         cwd=os.fspath(BASE_DIR),
         env=merged_env,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        timeout=timeout_seconds,
     )
-    return completed.returncode != 0
+    try:
+        proc.communicate(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        _terminate_process(proc)
+        raise
+    return proc.returncode != 0
+
+
+def _prepare_scoped_mutations(
+    source_file: Path,
+    function_name: str,
+    *,
+    max_mutants: int,
+) -> tuple[Any, list[Mutation], str]:
+    _ensure_mutmut_config(source_file)
+    original_code = source_file.read_text(encoding="utf-8")
+    module, mutations, _, _ = create_mutations(str(source_file), original_code, None)
+    scoped = _filter_mutations_for_function(list(mutations), function_name=function_name)
+    if not scoped:
+        raise ValueError("nenhum mutante gerado para a função alvo")
+    if len(scoped) > max_mutants:
+        scoped = scoped[:max_mutants]
+    return module, scoped, original_code
 
 
 def run_mutation_testing(
@@ -184,10 +311,12 @@ def run_mutation_testing(
     function_name: str,
     test_file: Path,
     env: dict[str, str],
+    repo_root: Path | None = None,
     start_line: int | None = None,
     end_line: int | None = None,
     max_mutants: int = 25,
     timeout_seconds: int = 90,
+    function_timeout_seconds: int | None = None,
 ) -> MutationRunResult:
     source_file = _resolve_path(source_file)
     test_file = _resolve_path(test_file)
@@ -197,32 +326,66 @@ def run_mutation_testing(
     if not test_file.is_file():
         return _failed_result(f"arquivo de teste não encontrado: {test_file}")
 
+    deadline: float | None = None
+    if function_timeout_seconds is not None and function_timeout_seconds > 0:
+        deadline = time.monotonic() + function_timeout_seconds
+
+    if _deadline_exceeded(deadline):
+        return _timeout_result()
+
+    prep_timeout = _seconds_until_deadline(deadline)
     try:
-        _ensure_mutmut_config(source_file)
-        original_code = source_file.read_text(encoding="utf-8")
-        module, mutations, _, _ = create_mutations(str(source_file), original_code, None)
-        scoped = _filter_mutations_for_function(list(mutations), function_name=function_name)
-        if not scoped:
-            return _failed_result("nenhum mutante gerado para a função alvo")
-        if len(scoped) > max_mutants:
-            scoped = scoped[:max_mutants]
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(
+                _prepare_scoped_mutations,
+                source_file,
+                function_name,
+                max_mutants=max_mutants,
+            )
+            module, scoped, original_code = future.result(timeout=prep_timeout)
+    except FuturesTimeoutError:
+        return _timeout_result()
     except Exception as exc:  # noqa: BLE001
         return _failed_result(str(exc))
 
     work_root = Path(tempfile.mkdtemp(prefix="tcc_mutation_"))
-    shadow_source = _sklearn_shadow_path(source_file, work_root)
+    try:
+        shadow_source = _resolve_shadow_path(
+            source_file,
+            work_root,
+            repo_root=repo_root,
+        )
+    except Exception as exc:  # noqa: BLE001
+        shutil.rmtree(work_root, ignore_errors=True)
+        return _failed_result(str(exc))
+
     killed = 0
 
     try:
-        shadow_source.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source_file, shadow_source)
+        _setup_shadow_source(
+            source_file,
+            shadow_source,
+            repo_root=repo_root,
+        )
 
         for mutation in scoped:
+            if _deadline_exceeded(deadline):
+                return _timeout_result()
+
             try:
                 mutant_module = module.deep_replace(mutation.original_node, mutation.mutated_node)
                 mutant_source = mutant_module.code
             except Exception:  # noqa: BLE001
                 continue
+
+            remaining = _seconds_until_deadline(deadline)
+            if remaining is not None and remaining <= 0:
+                return _timeout_result()
+            per_mutant_timeout = (
+                min(timeout_seconds, remaining) if remaining is not None else timeout_seconds
+            )
+            if per_mutant_timeout <= 0:
+                return _timeout_result()
 
             try:
                 if _run_pytest_on_mutant(
@@ -231,11 +394,13 @@ def run_mutation_testing(
                     work_root=work_root,
                     mutant_source=mutant_source,
                     env=env,
-                    timeout_seconds=timeout_seconds,
+                    timeout_seconds=per_mutant_timeout,
                 ):
                     killed += 1
             except subprocess.TimeoutExpired:
                 killed += 1
+                if _deadline_exceeded(deadline):
+                    return _timeout_result()
             except Exception:  # noqa: BLE001
                 continue
             finally:
